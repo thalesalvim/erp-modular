@@ -44,7 +44,7 @@ export default function TeamPortal() {
       let foundEmp = null;
 
       for (const tenant of list) {
-        const empListJson = localStorage.getItem(saas_\_employees);
+        const empListJson = localStorage.getItem("saas_employees");
         const empList = empListJson ? JSON.parse(empListJson) : [];
         const match = empList.find((emp: any) => 
           emp.name.toLowerCase().includes(cleanUser) || (emp.email && emp.email.toLowerCase() === cleanUser)
