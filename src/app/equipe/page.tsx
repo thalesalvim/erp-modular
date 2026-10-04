@@ -357,7 +357,6 @@ export default function Home() {
   const saveTenantData = async (key: string, data: any) => {
     if (!currentCompany) return;
     
-    // Monta o objeto completo atualizado com o novo dado
     const currentPayload = {
       employees,
       customers,
@@ -370,13 +369,10 @@ export default function Home() {
       expenses,
       appointments,
       attendances,
-      [key]: data // Atualiza a chave modificada
+      [key]: data
     };
 
-    // Salva tudo unificado na nuvem em 1 única requisição
     await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
-    
-    // Atualiza o cache local
     localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
   };
 
