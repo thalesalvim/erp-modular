@@ -215,7 +215,6 @@ export default function Home() {
         found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0];
       }
 
-      // FALLBACK DE SEGURANÇA PARA EVITAR TRAVAMENTO DE TELA VAZIA
       if (!found) {
         found = {
           slug: "studio-hair",
@@ -312,7 +311,26 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
+  // FUNÇÃO OTIMIZADA COM CACHE LOCAL INSTANTÂNEO
   const loadTenantData = async (slug: string) => {
+    const cachedData = localStorage.getItem(`saas_cache_${slug}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.employees) setEmployees(parsed.employees);
+        if (parsed.customers) setCustomers(parsed.customers);
+        if (parsed.services) setServices(parsed.services);
+        if (parsed.rolesList) setRolesList(parsed.rolesList);
+        if (parsed.promotions) setPromotions(parsed.promotions);
+        if (parsed.products) setProducts(parsed.products);
+        if (parsed.stockMoves) setStockMoves(parsed.stockMoves);
+        if (parsed.sales) setSales(parsed.sales);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+        if (parsed.appointments) setAppointments(parsed.appointments);
+        if (parsed.attendances) setAttendances(parsed.attendances);
+      } catch (e) {}
+    }
+
     const emp = await getTenantDataCloud(slug, 'employees');
     const cust = await getTenantDataCloud(slug, 'customers');
     const srv = await getTenantDataCloud(slug, 'services');
@@ -336,6 +354,20 @@ export default function Home() {
     if (exp) setExpenses(exp);
     if (appts) setAppointments(appts);
     if (atts) setAttendances(atts);
+
+    localStorage.setItem(`saas_cache_${slug}`, JSON.stringify({
+      employees: emp || employees,
+      customers: cust || customers,
+      services: srv || services,
+      rolesList: roles || rolesList,
+      promotions: promo || promotions,
+      products: prod || products,
+      stockMoves: moves || stockMoves,
+      sales: sls || sales,
+      expenses: exp || expenses,
+      appointments: appts || appointments,
+      attendances: atts || attendances
+    }));
   };
 
   const saveTenantData = async (key: string, data: any) => {
@@ -365,7 +397,6 @@ export default function Home() {
     try {
       const { data: savedTenants, error } = await supabase.from('tenants').select('*');
       
-      // Se o banco retornar vazio, utiliza o fallback local de segurança para permitir o acesso da Gisele imediatamente
       const tenantsList = (!error && savedTenants && savedTenants.length > 0) ? savedTenants : [currentCompany];
 
       let authCompany = null;
