@@ -53,6 +53,7 @@ import {
   DollarSign,
   ArrowLeft
 } from "lucide-react";
+import { getTenantFromCloud, getTenantDataCloud, saveTenantDataCloud } from '@/lib/dbService';
 
 function hashPassword(pass: string): string {
   try {
@@ -297,28 +298,35 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
-  const loadTenantData = (slug: string) => {
-    const get = (key: string, def: any) => {
-      const data = localStorage.getItem(`saas_${slug}_${key}`);
-      return data ? JSON.parse(data) : def;
-    };
+  const loadTenantData = async (slug: string) => {
+    const emp = await getTenantDataCloud(slug, 'employees');
+    const cust = await getTenantDataCloud(slug, 'customers');
+    const srv = await getTenantDataCloud(slug, 'services');
+    const roles = await getTenantDataCloud(slug, 'rolesList');
+    const promo = await getTenantDataCloud(slug, 'promotions');
+    const prod = await getTenantDataCloud(slug, 'products');
+    const moves = await getTenantDataCloud(slug, 'stockMoves');
+    const sls = await getTenantDataCloud(slug, 'sales');
+    const exp = await getTenantDataCloud(slug, 'expenses');
+    const appts = await getTenantDataCloud(slug, 'appointments');
+    const atts = await getTenantDataCloud(slug, 'attendances');
 
-    setEmployees(get("employees", []));
-    setCustomers(get("customers", []));
-    setServices(get("services", []));
-    setRolesList(get("rolesList", ["Cabeleireiro", "Manicure", "Barbeiro", "Esteticista"]));
-    setPromotions(get("promotions", []));
-    setProducts(get("products", []));
-    setStockMoves(get("stockMoves", []));
-    setSales(get("sales", []));
-    setExpenses(get("expenses", []));
-    setAppointments(get("appointments", []));
-    setAttendances(get("attendances", []));
+    if (emp) setEmployees(emp);
+    if (cust) setCustomers(cust);
+    if (srv) setServices(srv);
+    if (roles) setRolesList(roles);
+    if (promo) setPromotions(promo);
+    if (prod) setProducts(prod);
+    if (moves) setStockMoves(moves);
+    if (sls) setSales(sls);
+    if (exp) setExpenses(exp);
+    if (appts) setAppointments(appts);
+    if (atts) setAttendances(atts);
   };
 
-  const saveTenantData = (key: string, data: any) => {
+  const saveTenantData = async (key: string, data: any) => {
     if (!currentCompany) return;
-    localStorage.setItem(`saas_${currentCompany.slug}_${key}`, JSON.stringify(data));
+    await saveTenantDataCloud(currentCompany.slug, key, data);
   };
 
   const updateCompanyInMasterDb = (updatedFields: any) => {
