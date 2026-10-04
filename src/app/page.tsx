@@ -53,6 +53,7 @@ import {
   DollarSign,
   ArrowLeft
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getTenantDataCloud, saveTenantDataCloud } from '@/lib/dbService';
 
 function hashPassword(pass: string): string {
@@ -192,7 +193,7 @@ export default function Home() {
       const newLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         timestamp: new Date().toLocaleString("pt-BR"),
-        companyName: currentCompany.companyName,
+        companyName: currentCompany.company_name || currentCompany.companyName,
         action: actionDesc,
         author: `${activeUserName} (${activeUserRole})`
       };
@@ -210,50 +211,21 @@ export default function Home() {
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
       const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
 
-      let savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
-      
-      // SEED AUTOMÁTICO: Se o Supabase estiver vazio, cria o registro padrão na nuvem
-      if (!savedTenants || !Array.isArray(savedTenants) || savedTenants.length === 0) {
-        const defaultTenant = {
-          slug: "studio-hair",
-          companyName: "Studio Hair & Beauty",
-          status: "Ativo",
-          planName: "Pro",
-          monthlyFee: 149.90,
-          dueDay: 10,
-          ownerName: "Gisele Alvim",
-          ownerEmail: "gisele@gmail.com",
-          primaryColor: "pink",
-          logoType: "icon",
-          logoIcon: "scissors",
-          logins: [
-            {
-              name: "Gisele Alvim",
-              email: "gisele@gmail.com",
-              user: "gisele",
-              passwordHash: "sec_12345",
-              role: "Gestor"
-            }
-          ]
-        };
-        await saveTenantDataCloud("master_db", "saas_tenants_db", [defaultTenant]);
-        savedTenants = [defaultTenant];
-      }
-
-      if (savedTenants && Array.isArray(savedTenants)) {
+      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
+      if (!error && savedTenants && savedTenants.length > 0) {
         try {
           const found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0] || null;
           if (found) {
             setCurrentCompany(found);
-            setSalonConfig(prev => ({ ...prev, name: found.companyName }));
+            setSalonConfig(prev => ({ ...prev, name: found.company_name || found.companyName }));
             setIsTenantBlocked(found.status === "Bloqueado");
             loadTenantData(found.slug);
 
             if (masterBypassParam && masterBypassParam === storedBypass) {
               setIsMasterBypassActive(true);
-              setActiveUserName(bypassLoginName || found.ownerName || "Gisele Alvim");
+              setActiveUserName(bypassLoginName || found.owner_name || found.ownerName || "Gisele Alvim");
               setActiveUserRole(bypassLoginRole || "Dono");
-              setActiveUserEmail(found.ownerEmail || "gisele@gmail.com");
+              setActiveUserEmail(found.owner_email || found.ownerEmail || "gisele@gmail.com");
               setIsLogged(true);
               setActiveTab("dashboard");
               recordSystemLog("Acesso Master Support Mode Ativado");
@@ -287,7 +259,7 @@ export default function Home() {
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
-      const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+      const { data: savedTenants } = await supabase.from('tenants').select('*');
       if (savedTenants && Array.isArray(savedTenants)) {
         try {
           const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
@@ -362,15 +334,15 @@ export default function Home() {
   const updateCompanyInMasterDb = async (updatedFields: any) => {
     const updatedCompany = { ...currentCompany, ...updatedFields };
     setCurrentCompany(updatedCompany);
-    if (updatedFields.companyName) {
-      setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName }));
+    if (updatedFields.companyName || updatedFields.company_name) {
+      setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
     }
-    const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
-    if (savedTenants && Array.isArray(savedTenants)) {
-      try {
-        const newList = savedTenants.map((t: any) => t.slug === currentCompany.slug ? updatedCompany : t);
-        await saveTenantDataCloud("master_db", "saas_tenants_db", newList);
-      } catch (e) {}
+    const { error } = await supabase
+      .from('tenants')
+      .update(updatedFields)
+      .eq('slug', currentCompany.slug);
+    if (error) {
+      console.error("Erro ao atualizar tenant na nuvem:", error);
     }
   };
 
@@ -378,13 +350,13 @@ export default function Home() {
     e.preventDefault();
     setLoginError("");
 
-    const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
-    if (!savedTenants || !Array.isArray(savedTenants) || savedTenants.length === 0) {
-      setLoginError("Nenhuma empresa cadastrada no sistema.");
-      return;
-    }
-
     try {
+      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
+      if (error || !savedTenants || savedTenants.length === 0) {
+        setLoginError("Nenhuma empresa cadastrada no sistema.");
+        return;
+      }
+
       let authCompany = null;
       let matchedRole = "Gestor";
       let matchedName = "Usuário";
@@ -395,7 +367,8 @@ export default function Home() {
       const securePassHash = hashPassword(cleanPass);
 
       for (const tenant of savedTenants) {
-        const match = tenant.logins?.find(
+        const tenantLogins = tenant.logins || [];
+        const match = tenantLogins.find(
           (l: any) =>
             (l.user.toLowerCase() === cleanInput || (l.email && l.email.toLowerCase() === cleanInput)) &&
             (l.passwordHash === cleanPass || l.passwordHash === securePassHash)
@@ -403,7 +376,7 @@ export default function Home() {
         if (match) {
           authCompany = tenant;
           matchedRole = match.role || "Gestor";
-          matchedName = match.name || tenant.ownerName || "Usuário";
+          matchedName = match.name || tenant.owner_name || tenant.ownerName || "Usuário";
           matchedEmail = match.email || match.user || cleanInput;
           break;
         }
@@ -429,7 +402,7 @@ export default function Home() {
         setActiveUserName(matchedName);
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
-        setSalonConfig(prev => ({ ...prev, name: authCompany.companyName }));
+        setSalonConfig(prev => ({ ...prev, name: authCompany.company_name || authCompany.companyName }));
         await loadTenantData(authCompany.slug);
         setIsLogged(true);
 
@@ -445,8 +418,9 @@ export default function Home() {
       } else {
         setLoginError("Usuário, e-mail ou senha incorretos.");
       }
-    } catch {
-      setLoginError("Erro na autenticação.");
+    } catch (err) {
+      console.error(err);
+      setLoginError("Erro na autenticação com a nuvem.");
     }
   };
 
@@ -488,13 +462,12 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // Liberação flexível: Ultra OU se o módulo 'dre' estiver explicitamente ativo no Master
   const hasDREAccess = useMemo(() => {
-    const pName = (currentCompany?.planName || "").toLowerCase();
+    const pName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
     const isUltra = pName.includes("ultra");
     const moduleAllowed = currentCompany?.allowedModules?.dre === true;
     return isUltra || moduleAllowed;
-  }, [currentCompany?.planName, currentCompany?.allowedModules]);
+  }, [currentCompany?.planName, currentCompany?.plan_name, currentCompany?.allowedModules]);
 
   const filteredSales = useMemo(() => {
     if (isManager) return sales;
@@ -643,13 +616,15 @@ export default function Home() {
     }
   };
 
-  const theme = getThemeClasses(currentCompany?.primaryColor || "pink");
+  const theme = getThemeClasses(currentCompany?.primary_color || currentCompany?.primaryColor || "pink");
 
   const renderCompanyLogo = (sizeClass = "w-6 h-6", iconSize = 22) => {
-    if (currentCompany?.logoType === "image" && currentCompany?.logoUrl) {
-      return <img src={currentCompany.logoUrl} alt="Logo" className={`${sizeClass} object-contain rounded`} />;
+    const lType = currentCompany?.logo_type || currentCompany?.logoType;
+    const lUrl = currentCompany?.logo_url || currentCompany?.logoUrl;
+    if (lType === "image" && lUrl) {
+      return <img src={lUrl} alt="Logo" className={`${sizeClass} object-contain rounded`} />;
     }
-    const iconType = currentCompany?.logoIcon || "scissors";
+    const iconType = currentCompany?.logo_icon || currentCompany?.logoIcon || "scissors";
     return (
       <div className={theme.activeText}>
         {iconType === "scissors" && <Scissors size={iconSize} />}
@@ -820,7 +795,6 @@ export default function Home() {
     <div className={`flex h-screen font-sans ${bgClass}`}>
       <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl">
         <div>
-          {/* BANNER DISCRETO DE SUPORTE MASTER CASO VOCÊ TENHA ENTRADO VIA BYPASS */}
           {isMasterBypassActive && (
             <div className="mb-4 p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl space-y-1.5 text-center">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">Modo Suporte Master</span>
@@ -1502,9 +1476,9 @@ export default function Home() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={`p-5 rounded-2xl border ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
                   <span className="text-[11px] font-bold uppercase tracking-wider opacity-60 block mb-1">Plano Atual</span>
-                  <h4 className="text-lg font-black text-pink-600">{currentCompany?.planName || "Pro"}</h4>
-                  <p className="text-sm font-bold mt-1">R$ {Number(currentCompany?.monthlyFee || 149.90).toFixed(2)} <span className="text-[11px] opacity-60">/ mês</span></p>
-                  <p className="text-[11px] opacity-70 mt-3">Vencimento todo dia {currentCompany?.dueDay || 10} de cada mês.</p>
+                  <h4 className="text-lg font-black text-pink-600">{currentCompany?.planName || currentCompany?.plan_name || "Pro"}</h4>
+                  <p className="text-sm font-bold mt-1">R$ {Number(currentCompany?.monthlyFee || currentCompany?.monthly_fee || 149.90).toFixed(2)} <span className="text-[11px] opacity-60">/ mês</span></p>
+                  <p className="text-[11px] opacity-70 mt-3">Vencimento todo dia {currentCompany?.dueDay || currentCompany?.due_day || 10} de cada mês.</p>
                 </div>
 
                 <div className={`p-5 rounded-2xl border flex flex-col justify-between ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
@@ -1600,7 +1574,8 @@ export default function Home() {
                         ]
                       }
                     ].map((p, idx) => {
-                      const isCurrent = !p.isConsultancyCard && (currentCompany?.planName || "").toLowerCase().includes(p.name.toLowerCase());
+                      const currentPName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
+                      const isCurrent = !p.isConsultancyCard && currentPName.includes(p.name.toLowerCase());
                       return (
                         <div key={idx} className={`p-4 rounded-2xl border flex flex-col justify-between space-y-3 ${isCurrent ? "border-pink-500 bg-pink-500/5" : "border-slate-300 dark:border-slate-800"}`}>
                           <div>
@@ -1693,7 +1668,7 @@ export default function Home() {
                   onClick={() => {
                     const nextDark = !darkMode;
                     setDarkMode(nextDark);
-                    saveUserPreferences(nextDark, currentCompany?.primaryColor || "pink");
+                    saveUserPreferences(nextDark, currentCompany?.primary_color || currentCompany?.primaryColor || "pink");
                   }}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer shadow transition"
                 >
@@ -1710,7 +1685,7 @@ export default function Home() {
                     onChange={e => {
                       const newName = e.target.value;
                       setSalonConfig({ ...salonConfig, name: newName });
-                      updateCompanyInMasterDb({ companyName: newName });
+                      updateCompanyInMasterDb({ company_name: newName });
                     }}
                     className="w-full border border-slate-300 p-2.5 rounded-xl outline-none bg-transparent"
                   />
@@ -1735,15 +1710,15 @@ export default function Home() {
                       key={c.id}
                       type="button"
                       onClick={() => {
-                        const updated = { ...currentCompany, primaryColor: c.id };
+                        const updated = { ...currentCompany, primary_color: c.id };
                         setCurrentCompany(updated);
                         if (isManager) {
-                          updateCompanyInMasterDb({ primaryColor: c.id });
+                          updateCompanyInMasterDb({ primary_color: c.id });
                         }
                         saveUserPreferences(darkMode, c.id);
                       }}
                       className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 cursor-pointer transition ${
-                        (currentCompany?.primaryColor || "pink") === c.id ? "border-slate-900 ring-2 ring-slate-900/20" : "border-slate-200"
+                        (currentCompany?.primary_color || currentCompany?.primaryColor || "pink") === c.id ? "border-slate-900 ring-2 ring-slate-900/20" : "border-slate-200"
                       }`}
                     >
                       <span className={`w-5 h-5 rounded-full ${c.bg}`} />
@@ -1769,7 +1744,7 @@ export default function Home() {
                         const reader = new FileReader();
                         reader.onload = (event) => {
                           const base64 = event.target?.result as string;
-                          updateCompanyInMasterDb({ logoType: "image", logoUrl: base64 });
+                          updateCompanyInMasterDb({ logo_type: "image", logo_url: base64 });
                           alert("Logotipo atualizado com sucesso!");
                         };
                         reader.readAsDataURL(file);
@@ -1796,9 +1771,9 @@ export default function Home() {
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => updateCompanyInMasterDb({ logoType: "icon", logoIcon: item.id })}
+                          onClick={() => updateCompanyInMasterDb({ logo_type: "icon", logo_icon: item.id })}
                           className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 cursor-pointer transition ${
-                            currentCompany?.logoIcon === item.id ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200"
+                            (currentCompany?.logo_icon || currentCompany?.logoIcon) === item.id ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200"
                           }`}
                         >
                           {item.icon}
@@ -1905,7 +1880,7 @@ export default function Home() {
             <div className="space-y-3 pt-2">
               <button onClick={() => {
                 const newFee = selectedPlanToUpgrade.name === "Básico" ? 89.90 : selectedPlanToUpgrade.name === "Ultra" ? 299.90 : 149.90;
-                updateCompanyInMasterDb({ planName: selectedPlanToUpgrade.name, monthlyFee: newFee });
+                updateCompanyInMasterDb({ plan_name: selectedPlanToUpgrade.name, monthly_fee: newFee });
                 recordSystemLog(`Alterou plano para ${selectedPlanToUpgrade.name} (Efetivo Agora)`);
                 alert(`⚠ Aviso: A alteração para o plano ${selectedPlanToUpgrade.name} foi aplicada agora.\n\nA próxima fatura será calculada com base nos dias usados proporcionalmente.`);
                 setIsPlanModalOpen(false);
