@@ -202,36 +202,38 @@ export default function Home() {
 
   useEffect(() => {
     setIsMounted(true);
-    const params = new URLSearchParams(window.location.search);
-    const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
-    const masterBypassParam = params.get("master_bypass");
-    const storedBypass = localStorage.getItem("master_bypass_auth");
-    const bypassLoginName = localStorage.getItem("master_bypass_login_name");
-    const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
+    const initializeApp = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
+      const masterBypassParam = params.get("master_bypass");
+      const storedBypass = localStorage.getItem("master_bypass_auth");
+      const bypassLoginName = localStorage.getItem("master_bypass_login_name");
+      const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
 
-    const savedTenants = localStorage.getItem("saas_tenants_db");
-    if (savedTenants) {
-      try {
-        const list = JSON.parse(savedTenants);
-        const found = list.find((t: any) => t.slug === slugParam) || list[0] || null;
-        if (found) {
-          setCurrentCompany(found);
-          setSalonConfig(prev => ({ ...prev, name: found.companyName }));
-          setIsTenantBlocked(found.status === "Bloqueado");
-          loadTenantData(found.slug);
+      const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+      if (savedTenants && Array.isArray(savedTenants)) {
+        try {
+          const found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0] || null;
+          if (found) {
+            setCurrentCompany(found);
+            setSalonConfig(prev => ({ ...prev, name: found.companyName }));
+            setIsTenantBlocked(found.status === "Bloqueado");
+            loadTenantData(found.slug);
 
-          if (masterBypassParam && masterBypassParam === storedBypass) {
-            setIsMasterBypassActive(true);
-            setActiveUserName(bypassLoginName || found.ownerName || "Gisele Alvim");
-            setActiveUserRole(bypassLoginRole || "Dono");
-            setActiveUserEmail(found.ownerEmail || "gisele@gmail.com");
-            setIsLogged(true);
-            setActiveTab("dashboard");
-            recordSystemLog("Acesso Master Support Mode Ativado");
+            if (masterBypassParam && masterBypassParam === storedBypass) {
+              setIsMasterBypassActive(true);
+              setActiveUserName(bypassLoginName || found.ownerName || "Gisele Alvim");
+              setActiveUserRole(bypassLoginRole || "Dono");
+              setActiveUserEmail(found.ownerEmail || "gisele@gmail.com");
+              setIsLogged(true);
+              setActiveTab("dashboard");
+              recordSystemLog("Acesso Master Support Mode Ativado");
+            }
           }
-        }
-      } catch (e) {}
-    }
+        } catch (e) {}
+      }
+    };
+    initializeApp();
 
     const savedGoals = localStorage.getItem("saas_dashboard_goals");
     if (savedGoals) {
@@ -255,18 +257,17 @@ export default function Home() {
   // SINCRONIZAÇÃO EM TEMPO REAL COM O BANCO MASTER
   useEffect(() => {
     if (!currentCompany?.slug) return;
-    const interval = setInterval(() => {
-      const savedTenants = localStorage.getItem("saas_tenants_db");
-      if (savedTenants) {
+    const interval = setInterval(async () => {
+      const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+      if (savedTenants && Array.isArray(savedTenants)) {
         try {
-          const list = JSON.parse(savedTenants);
-          const freshFound = list.find((t: any) => t.slug === currentCompany.slug);
+          const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
           if (freshFound) {
             setCurrentCompany(freshFound);
           }
         } catch (e) {}
       }
-    }, 1000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [currentCompany?.slug]);
 
@@ -329,34 +330,32 @@ export default function Home() {
     await saveTenantDataCloud(currentCompany.slug, key, data);
   };
 
-  const updateCompanyInMasterDb = (updatedFields: any) => {
+  const updateCompanyInMasterDb = async (updatedFields: any) => {
     const updatedCompany = { ...currentCompany, ...updatedFields };
     setCurrentCompany(updatedCompany);
     if (updatedFields.companyName) {
       setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName }));
     }
-    const savedTenants = localStorage.getItem("saas_tenants_db");
-    if (savedTenants) {
+    const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+    if (savedTenants && Array.isArray(savedTenants)) {
       try {
-        const list = JSON.parse(savedTenants);
-        const newList = list.map((t: any) => t.slug === currentCompany.slug ? updatedCompany : t);
-        localStorage.setItem("saas_tenants_db", JSON.stringify(newList));
+        const newList = savedTenants.map((t: any) => t.slug === currentCompany.slug ? updatedCompany : t);
+        await saveTenantDataCloud("master_db", "saas_tenants_db", newList);
       } catch (e) {}
     }
   };
 
-  const handleClientLogin = (e: React.FormEvent) => {
+  const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
 
-    const savedTenants = localStorage.getItem("saas_tenants_db");
-    if (!savedTenants) {
+    const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+    if (!savedTenants || !Array.isArray(savedTenants) || savedTenants.length === 0) {
       setLoginError("Nenhuma empresa cadastrada no sistema.");
       return;
     }
 
     try {
-      const list = JSON.parse(savedTenants);
       let authCompany = null;
       let matchedRole = "Gestor";
       let matchedName = "Usuário";
@@ -366,7 +365,7 @@ export default function Home() {
       const cleanPass = loginPass.trim();
       const securePassHash = hashPassword(cleanPass);
 
-      for (const tenant of list) {
+      for (const tenant of savedTenants) {
         const match = tenant.logins?.find(
           (l: any) =>
             (l.user.toLowerCase() === cleanInput || (l.email && l.email.toLowerCase() === cleanInput)) &&
@@ -402,7 +401,7 @@ export default function Home() {
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
         setSalonConfig(prev => ({ ...prev, name: authCompany.companyName }));
-        loadTenantData(authCompany.slug);
+        await loadTenantData(authCompany.slug);
         setIsLogged(true);
 
         recordSystemLog(`Login efetuado com sucesso (${matchedRole})`);
