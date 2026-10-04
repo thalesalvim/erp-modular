@@ -1,4 +1,4 @@
-Ôªø"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { Users, CalendarDays, LogOut, Clock } from "lucide-react";
@@ -22,7 +22,7 @@ export default function TeamPortal() {
         }
       }
     } catch (e) {
-      console.error("Erro ao carregar sess√£o da equipe", e);
+      console.error("Erro ao carregar sess„o da equipe", e);
     }
   }, []);
 
@@ -61,7 +61,7 @@ export default function TeamPortal() {
         setLoggedEmployee(foundEmp);
         setIsLogged(true);
       } else {
-        setErrorMsg("Colaboradora n√£o encontrada. Verifique com o gestor.");
+        setErrorMsg("Colaboradora n„o encontrada. Verifique com o gestor.");
       }
     } catch {
       setErrorMsg("Erro ao validar acesso.");
@@ -85,12 +85,12 @@ export default function TeamPortal() {
               <Users size={32} />
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">Portal da Colaboradora</h1>
-            <p className="text-xs text-slate-400">Consulte sua escala e hor√°rios de atendimento.</p>
+            <p className="text-xs text-slate-400">Consulte sua escala e hor·rios de atendimento.</p>
           </div>
 
           <form onSubmit={handleTeamLogin} className="space-y-4 text-xs">
             <div>
-              <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">Seu Nome / Usu√°rio</label>
+              <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">Seu Nome / Usu·rio</label>
               <input
                 type="text"
                 required
@@ -108,7 +108,7 @@ export default function TeamPortal() {
                 required
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢"
+                placeholder="ïïïïïïïï"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-pink-500 transition"
               />
             </div>
@@ -129,7 +129,7 @@ export default function TeamPortal() {
 
           <div className="pt-4 border-t border-slate-800 text-center">
             <a href="/" className="text-xs text-slate-400 hover:text-white transition">
-              ‚Üê Voltar ao Login Principal
+              ? Voltar ao Login Principal
             </a>
           </div>
         </div>
@@ -166,7 +166,7 @@ export default function TeamPortal() {
                 <CalendarDays size={18} className="text-pink-500" />
                 Sua Escala de Trabalho Semanal
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Estes s√£o os seus dias e hor√°rios cadastrados na unidade.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Estes s„o os seus dias e hor·rios cadastrados na unidade.</p>
             </div>
           </div>
 
@@ -184,8 +184,8 @@ export default function TeamPortal() {
                   {day.isWorking ? (
                     <div className="flex items-center gap-2 text-slate-300 font-mono">
                       <Clock size={14} className="text-pink-400" />
-                      <span>{day.openTime} √†s {day.closeTime}</span>
-                      {day.lunchStart && <span className="text-slate-500 text-[11px]">(Almo√ßo: {day.lunchStart} - {day.lunchEnd})</span>}
+                      <span>{day.openTime} ‡s {day.closeTime}</span>
+                      {day.lunchStart && <span className="text-slate-500 text-[11px]">(AlmoÁo: {day.lunchStart} - {day.lunchEnd})</span>}
                     </div>
                   ) : (
                     <span className="text-slate-500 italic">Descanso / Folga</span>
@@ -199,3 +199,4 @@ export default function TeamPortal() {
     </div>
   );
 }
+
