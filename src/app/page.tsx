@@ -210,7 +210,36 @@ export default function Home() {
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
       const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
 
-      const savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+      let savedTenants = await getTenantDataCloud("master_db", "saas_tenants_db");
+      
+      // SEED AUTOMÁTICO: Se o Supabase estiver vazio, cria o registro padrão na nuvem
+      if (!savedTenants || !Array.isArray(savedTenants) || savedTenants.length === 0) {
+        const defaultTenant = {
+          slug: "studio-hair",
+          companyName: "Studio Hair & Beauty",
+          status: "Ativo",
+          planName: "Pro",
+          monthlyFee: 149.90,
+          dueDay: 10,
+          ownerName: "Gisele Alvim",
+          ownerEmail: "gisele@gmail.com",
+          primaryColor: "pink",
+          logoType: "icon",
+          logoIcon: "scissors",
+          logins: [
+            {
+              name: "Gisele Alvim",
+              email: "gisele@gmail.com",
+              user: "gisele",
+              passwordHash: "sec_12345",
+              role: "Gestor"
+            }
+          ]
+        };
+        await saveTenantDataCloud("master_db", "saas_tenants_db", [defaultTenant]);
+        savedTenants = [defaultTenant];
+      }
+
       if (savedTenants && Array.isArray(savedTenants)) {
         try {
           const found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0] || null;
