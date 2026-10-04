@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-// Buscar dados de um tenant específico no Supabase
+// Buscar dados de um tenant específico no Supabase (metadados, plano, logins)
 export async function getTenantFromCloud(slug: string) {
   const { data, error } = await supabase
     .from('tenants')
@@ -15,27 +15,44 @@ export async function getTenantFromCloud(slug: string) {
   return data;
 }
 
-// Salvar/Atualizar dados operacionais (clientes, agendamentos, etc.) na nuvem
-export async function saveTenantDataCloud(slug: string, dataKey: string, payload: any) {
+// Salvar TODOS os dados operacionais da empresa de uma só vez (1 única requisição)
+export async function saveAllTenantDataCloud(slug: string, allData: {
+  employees?: any[];
+  customers?: any[];
+  services?: any[];
+  rolesList?: string[];
+  promotions?: any[];
+  products?: any[];
+  stockMoves?: any[];
+  sales?: any[];
+  expenses?: any[];
+  appointments?: any[];
+  attendances?: any[];
+}) {
   const { error } = await supabase
     .from('tenant_data')
     .upsert(
-      { tenant_slug: slug, data_key: dataKey, payload, updated_at: new Date() },
+      { 
+        tenant_slug: slug, 
+        data_key: 'all_data', 
+        payload: allData, 
+        updated_at: new Date() 
+      },
       { onConflict: 'tenant_slug,data_key' }
     );
 
   if (error) {
-    console.error(`Erro ao salvar ${dataKey} na nuvem:`, error);
+    console.error(`Erro ao salvar dados completos na nuvem:`, error);
   }
 }
 
-// Carregar dados operacionais da nuvem
-export async function getTenantDataCloud(slug: string, dataKey: string) {
+// Carregar TODOS os dados operacionais da nuvem de uma só vez (1 única requisição ultra-rápida)
+export async function getAllTenantDataCloud(slug: string) {
   const { data, error } = await supabase
     .from('tenant_data')
     .select('payload')
     .eq('tenant_slug', slug)
-    .eq('data_key', dataKey)
+    .eq('data_key', 'all_data')
     .single();
 
   if (error || !data) {
