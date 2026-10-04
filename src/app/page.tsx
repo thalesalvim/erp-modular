@@ -311,7 +311,7 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
-  // FUNÇÃO OTIMIZADA COM CACHE LOCAL INSTANTÂNEO
+  // FUNÇÃO OTIMIZADA COM CARREGAMENTO PARALELO (INSTANTÂNEO)
   const loadTenantData = async (slug: string) => {
     const cachedData = localStorage.getItem(`saas_cache_${slug}`);
     if (cachedData) {
@@ -331,43 +331,49 @@ export default function Home() {
       } catch (e) {}
     }
 
-    const emp = await getTenantDataCloud(slug, 'employees');
-    const cust = await getTenantDataCloud(slug, 'customers');
-    const srv = await getTenantDataCloud(slug, 'services');
-    const roles = await getTenantDataCloud(slug, 'rolesList');
-    const promo = await getTenantDataCloud(slug, 'promotions');
-    const prod = await getTenantDataCloud(slug, 'products');
-    const moves = await getTenantDataCloud(slug, 'stockMoves');
-    const sls = await getTenantDataCloud(slug, 'sales');
-    const exp = await getTenantDataCloud(slug, 'expenses');
-    const appts = await getTenantDataCloud(slug, 'appointments');
-    const atts = await getTenantDataCloud(slug, 'attendances');
+    try {
+      const [emp, cust, srv, roles, promo, prod, moves, sls, exp, appts, atts] = await Promise.all([
+        getTenantDataCloud(slug, 'employees'),
+        getTenantDataCloud(slug, 'customers'),
+        getTenantDataCloud(slug, 'services'),
+        getTenantDataCloud(slug, 'rolesList'),
+        getTenantDataCloud(slug, 'promotions'),
+        getTenantDataCloud(slug, 'products'),
+        getTenantDataCloud(slug, 'stockMoves'),
+        getTenantDataCloud(slug, 'sales'),
+        getTenantDataCloud(slug, 'expenses'),
+        getTenantDataCloud(slug, 'appointments'),
+        getTenantDataCloud(slug, 'attendances')
+      ]);
 
-    if (emp) setEmployees(emp);
-    if (cust) setCustomers(cust);
-    if (srv) setServices(srv);
-    if (roles) setRolesList(roles);
-    if (promo) setPromotions(promo);
-    if (prod) setProducts(prod);
-    if (moves) setStockMoves(moves);
-    if (sls) setSales(sls);
-    if (exp) setExpenses(exp);
-    if (appts) setAppointments(appts);
-    if (atts) setAttendances(atts);
+      if (emp) setEmployees(emp);
+      if (cust) setCustomers(cust);
+      if (srv) setServices(srv);
+      if (roles) setRolesList(roles);
+      if (promo) setPromotions(promo);
+      if (prod) setProducts(prod);
+      if (moves) setStockMoves(moves);
+      if (sls) setSales(sls);
+      if (exp) setExpenses(exp);
+      if (appts) setAppointments(appts);
+      if (atts) setAttendances(atts);
 
-    localStorage.setItem(`saas_cache_${slug}`, JSON.stringify({
-      employees: emp || employees,
-      customers: cust || customers,
-      services: srv || services,
-      rolesList: roles || rolesList,
-      promotions: promo || promotions,
-      products: prod || products,
-      stockMoves: moves || stockMoves,
-      sales: sls || sales,
-      expenses: exp || expenses,
-      appointments: appts || appointments,
-      attendances: atts || attendances
-    }));
+      localStorage.setItem(`saas_cache_${slug}`, JSON.stringify({
+        employees: emp || employees,
+        customers: cust || customers,
+        services: srv || services,
+        rolesList: roles || rolesList,
+        promotions: promo || promotions,
+        products: prod || products,
+        stockMoves: moves || stockMoves,
+        sales: sls || sales,
+        expenses: exp || expenses,
+        appointments: appts || appointments,
+        attendances: atts || attendances
+      }));
+    } catch (e) {
+      console.error("Erro ao sincronizar dados da nuvem:", e);
+    }
   };
 
   const saveTenantData = async (key: string, data: any) => {
