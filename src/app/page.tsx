@@ -274,6 +274,7 @@ export default function Home() {
     }
   }, []);
 
+  // Monitoramento em tempo real do status de bloqueio da empresa
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
@@ -283,6 +284,7 @@ export default function Home() {
           const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
           if (freshFound) {
             setCurrentCompany(freshFound);
+            setIsTenantBlocked(freshFound.status === "Bloqueado");
           }
         } catch (e) {}
       }
@@ -823,7 +825,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE */}
+        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE CORRIGIDO */}
         {isForgotModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-xs text-white">
@@ -838,15 +840,15 @@ export default function Home() {
               {forgotStep === "search" ? (
                 <div className="space-y-4">
                   <p className="text-slate-400">
-                    Não lembra seu e-mail? Digite o seu <strong>Nome completo</strong> ou parte do seu <strong>Usuário</strong> para localizarmos seu cadastro na base de dados.
+                    Não lembra seu e-mail? Digite o seu <strong>Nome</strong> ou parte do seu <strong>Usuário</strong> para localizarmos seu cadastro na base de dados.
                   </p>
                   
                   <div className="space-y-2">
-                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Pesquisar por Nome ou E-mail</label>
+                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Pesquisar por Nome, E-mail ou Usuário</label>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
-                        placeholder="Ex: Gisele Alvim ou gisele@..." 
+                        placeholder="Ex: Gisele Alvim, gisele..." 
                         value={forgotSearchQuery} 
                         onChange={e => setForgotSearchQuery(e.target.value)} 
                         className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-indigo-500"
@@ -855,12 +857,12 @@ export default function Home() {
                         type="button"
                         onClick={async () => {
                           if (!forgotSearchQuery.trim()) {
-                            alert("Informe um nome ou e-mail para pesquisar.");
+                            alert("Informe um nome, usuário ou e-mail para pesquisar.");
                             return;
                           }
                           try {
-                            const { data: tenants } = await supabase.from('tenants').select('*');
-                            if (!tenants) {
+                            const { data: tenants, error } = await supabase.from('tenants').select('*');
+                            if (error || !tenants) {
                               alert("Nenhum registro encontrado na nuvem.");
                               return;
                             }
@@ -871,11 +873,13 @@ export default function Home() {
 
                             for (const t of tenants) {
                               const logins = t.logins || [];
-                              const match = logins.find((l: any) => 
-                                (l.name && l.name.toLowerCase().includes(queryLower)) ||
-                                (l.email && l.email.toLowerCase().includes(queryLower)) ||
-                                (l.user && l.user.toLowerCase().includes(queryLower))
-                              );
+                              const match = logins.find((l: any) => {
+                                const nameMatch = l.name && l.name.toLowerCase().includes(queryLower);
+                                const emailMatch = l.email && l.email.toLowerCase().includes(queryLower);
+                                const userMatch = l.user && l.user.toLowerCase().includes(queryLower);
+                                const ownerMatch = t.owner_name && t.owner_name.toLowerCase().includes(queryLower);
+                                return nameMatch || emailMatch || userMatch || ownerMatch;
+                              });
                               if (match) {
                                 foundLogin = match;
                                 targetTenant = t;
@@ -904,7 +908,7 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl space-y-1">
                     <span className="text-[10px] uppercase font-bold text-indigo-400 block">Cadastro Localizado com Sucesso</span>
-                    <p className="text-white font-bold text-sm">{forgotSearchResult?.login?.name}</p>
+                    <p className="text-white font-bold text-sm">{forgotSearchResult?.login?.name || "Usuário"}</p>
                     <p className="text-slate-300 text-[11px]">E-mail/Usuário: <strong>{forgotSearchResult?.login?.email || forgotSearchResult?.login?.user}</strong></p>
                     <p className="text-slate-400 text-[11px]">Empresa: <strong>{forgotSearchResult?.tenant?.company_name}</strong></p>
                   </div>
@@ -938,10 +942,10 @@ export default function Home() {
 
                         const newHash = hashPassword(forgotNewPass);
                         const targetTenant = forgotSearchResult.tenant;
-                        const targetEmail = forgotSearchResult.login.email || forgotSearchResult.login.user;
+                        const targetUserIdentifier = forgotSearchResult.login.email || forgotSearchResult.login.user;
 
                         const updatedLogins = targetTenant.logins.map((l: any) => {
-                          if ((l.email && l.email === targetEmail) || l.user === targetEmail || l.name === forgotSearchResult.login.name) {
+                          if ((l.email && l.email === targetUserIdentifier) || l.user === targetUserIdentifier || l.name === forgotSearchResult.login.name) {
                             return { ...l, passwordHash: newHash };
                           }
                           return l;
@@ -1661,8 +1665,8 @@ export default function Home() {
                   <div className="inline-flex p-4 bg-indigo-600/20 text-indigo-400 rounded-3xl border border-indigo-500/30">
                     <Lock size={40} />
                   </div>
-                  <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Faça upgrade para o Plano Ultra ou solicite liberação com o Master!</p>
+                  <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra ou Trial</h3>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Ative o Trial no Master ou faça upgrade para o Plano Ultra!</p>
                   <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
                     ✨ Conhecer o Plano Ultra
                   </button>
@@ -1676,7 +1680,7 @@ export default function Home() {
               <div className="border-b pb-4 flex justify-between items-center">
                 <div>
                   <h3 className="text-base font-bold flex items-center gap-2"><Award className="text-pink-600" size={20} /><span>Plano & Consultorias do Estabelecimento</span></h3>
-                  <p className="text-xs opacity-70 mt-0.5">Visualize seu plano contratado, altere sua assinatura e consulte suas consultorias restantes no mês.</p>
+                  <p className="text-xs opacity-70 mt-0.5">Visualize seu plano contratado, altere sua assinatura e consulte suas consultorias.</p>
                 </div>
                 <span className="bg-emerald-500/20 text-emerald-400 font-extrabold px-3 py-1 rounded-full text-xs">Assinatura Ativa</span>
               </div>
@@ -1689,19 +1693,28 @@ export default function Home() {
                   <p className="text-[11px] opacity-70 mt-3">Vencimento todo dia {currentCompany?.dueDay || currentCompany?.due_day || 10} de cada mês.</p>
                 </div>
 
-                <div className={`p-5 rounded-2xl border flex flex-col justify-between ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider opacity-60 block mb-1">Consultorias Restantes (Outubro/2026)</span>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-black text-indigo-500">1</span>
-                      <span className="text-xs font-bold opacity-70">de 1 consultoria disponível</span>
+                {/* Exibição condicional de consultorias apenas se for plano Ultra ou contratado */}
+                {((currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase().includes("ultra")) ? (
+                  <div className={`p-5 rounded-2xl border flex flex-col justify-between ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider opacity-60 block mb-1">Consultorias Restantes (Outubro/2026)</span>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-3xl font-black text-indigo-500">1</span>
+                        <span className="text-xs font-bold opacity-70">de 1 consultoria disponível</span>
+                      </div>
+                      <p className="text-[11px] opacity-70 mt-2">Atendimento técnico e estratégico com a Equipe Handy.</p>
                     </div>
-                    <p className="text-[11px] opacity-70 mt-2">Atendimento técnico e estratégico com especialista SaaS.</p>
+                    <button onClick={() => setIsConsultancyModalOpen(true)} className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl cursor-pointer shadow">
+                      📅 Agendar Consultoria
+                    </button>
                   </div>
-                  <button onClick={() => setIsConsultancyModalOpen(true)} className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl cursor-pointer shadow">
-                    📅 Agendar Consultoria
-                  </button>
-                </div>
+                ) : (
+                  <div className={`p-5 rounded-2xl border flex flex-col justify-center items-center text-center space-y-2 ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                    <Award size={28} className="text-slate-400 opacity-60" />
+                    <h5 className="font-bold text-sm">Consultorias Exclusivas</h5>
+                    <p className="text-[11px] opacity-60">Seu plano atual não inclui consultorias mensais. Faça upgrade para o Plano Ultra para desbloquear sessões estratégicas com a Equipe Handy.</p>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2">
@@ -1764,7 +1777,7 @@ export default function Home() {
                           "• Cadastro de clientes",
                           "• Resumo mensal avançado",
                           "• Módulo DRE Gerencial",
-                          "• 1 Consultorias mensais"
+                          "• 1 Consultorias mensais c/ Equipe Handy"
                         ]
                       },
                       {
@@ -1776,7 +1789,7 @@ export default function Home() {
                           "• Quinzenal (2x no mês)",
                           "• Semanal (4x no mês)",
                           "• Avulsa (Sessão única)",
-                          "• Alinhamento direto c/ suporte"
+                          "• Alinhamento direto c/ Equipe Handy"
                         ]
                       }
                     ].map((p, idx) => {
@@ -1801,7 +1814,7 @@ export default function Home() {
                           {p.isConsultancyCard ? (
                             <button onClick={() => {
                               recordSystemLog("Clicou em negociar plano de consultoria");
-                              alert("💬 Redirecionando para negociação de consultoria direta com o suporte Master.");
+                              alert("💬 Redirecionando para negociação de consultoria direta com a Equipe Handy.");
                             }} className="w-full py-2 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer flex items-center justify-center gap-1.5 shadow">
                               <MessageCircle size={14} />
                               <span>Negociar Consultoria</span>
@@ -2117,7 +2130,7 @@ export default function Home() {
             <form onSubmit={e => {
               e.preventDefault();
               recordSystemLog(`Solicitou agendamento de consultoria para o dia ${consultancyDate} às ${consultancyTime} | Pauta: ${consultancyAgendaNotes}`);
-              alert(`🚀 Solicitação enviada com sucesso!\n\nAlerta enviado via WhatsApp e E-mail para o Master.\nData preferida: ${consultancyDate} às ${consultancyTime}.\nPauta: ${consultancyAgendaNotes}\n\nEntraremos em contato em breve para confirmar!`);
+              alert(`🚀 Solicitação enviada com sucesso!\n\nAlerta enviado via WhatsApp e E-mail para a Equipe Handy.\nData preferida: ${consultancyDate} às ${consultancyTime}.\nPauta: ${consultancyAgendaNotes}\n\nEntraremos em contato em breve para confirmar!`);
               setIsConsultancyModalOpen(false);
               setConsultancyAgendaNotes("");
             }} className="space-y-3">
@@ -2138,7 +2151,7 @@ export default function Home() {
               </div>
 
               <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-[11px]">
-                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail Master.
+                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
               <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
