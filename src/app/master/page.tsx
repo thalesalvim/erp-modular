@@ -583,7 +583,6 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE PERMITIDO SE TIVER PLANO ULTRA OU SE O MÓDULO DUPLICADO "DRE (Teste)" ESTIVER ATIVADO
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -595,7 +594,6 @@ export default function Home() {
     return isUltra || testDreActive;
   }, [currentCompany]);
 
-  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -623,6 +621,7 @@ export default function Home() {
 
     return allowedMods[tabId] ?? true;
   };
+
   const filteredSales = useMemo(() => {
     if (isManager) return sales;
     return sales.filter(s => s.sellerName?.toLowerCase() === activeUserName.toLowerCase() || s.sellerName === activeUserName);
@@ -1163,7 +1162,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden ${cardBgClass}`}>
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <h3 className="font-bold text-slate-900 text-sm">Agenda de Atendimentos</h3>
-                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(employees[0]?.name || ""); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
+                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
                     </div>
                     {filteredAppointments.length === 0 ? (
                       <div className="p-12 text-center opacity-60 text-xs">Nenhum agendamento marcado.</div>
@@ -1803,12 +1802,15 @@ export default function Home() {
 
                   {isManager && (
                     <div>
-                      <label className="block mb-1 font-semibold">Nome da Empresa (Exclusivo via Painel Master)</label>
+                      <label className="block mb-1 font-semibold text-slate-400">Nome da Empresa (Gerenciado exclusivamente pelo Painel Master)</label>
                       <input
+                        type="text"
+                        readOnly
                         disabled
                         value={salonConfig.name}
-                        className="w-full border border-slate-700 bg-slate-900/50 text-slate-400 p-2.5 rounded-xl outline-none cursor-not-allowed"
+                        className="w-full border border-slate-700 bg-slate-900/60 text-slate-400 p-2.5 rounded-xl outline-none cursor-not-allowed select-none font-bold"
                       />
+                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, utilize a edição de clientes no Painel Master.</span>
                     </div>
                   )}
 
