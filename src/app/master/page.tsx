@@ -304,7 +304,7 @@ export default function MasterPanel() {
     const cleanUser = userInput.trim().toLowerCase();
     const cleanPass = passInput.trim();
 
-    if ((cleanUser === "thalesalvim997@gmail.com" || cleanUser === "thaleco7") && cleanPass === "Isabela123!") {
+    if ((cleanUser === "master" || cleanUser === "thaleco7") && cleanPass === "Isabela123!") {
       setIsMasterAuth(true);
       logAction("SaaS Central", "Login Master realizado com sucesso");
     } else {
