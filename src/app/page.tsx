@@ -115,7 +115,7 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   
-  // Inicializa o isLogged checando o localStorage para o F5 não deslogar
+  // Recupera diretamente do localStorage para o F5 manter o usuário logado instantaneamente
   const [isLogged, setIsLogged] = useState(() => {
     if (typeof window !== "undefined") {
       return Boolean(localStorage.getItem("saas_active_session"));
@@ -124,12 +124,47 @@ export default function Home() {
   });
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
-  const [currentCompany, setCurrentCompany] = useState<any>(null);
+  const [currentCompany, setCurrentCompany] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("saas_active_session_company");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
+
   const [isMasterBypassActive, setIsMasterBypassActive] = useState(false);
   
-  const [activeUserName, setActiveUserName] = useState<string>("Gestor");
-  const [activeUserRole, setActiveUserRole] = useState<string>("Gestor");
-  const [activeUserEmail, setActiveUserEmail] = useState<string>("");
+  const [activeUserName, setActiveUserName] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("saas_active_session");
+        if (saved) return JSON.parse(saved).name || "Gestor";
+      } catch (e) {}
+    }
+    return "Gestor";
+  });
+
+  const [activeUserRole, setActiveUserRole] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("saas_active_session");
+        if (saved) return JSON.parse(saved).role || "Gestor";
+      } catch (e) {}
+    }
+    return "Gestor";
+  });
+
+  const [activeUserEmail, setActiveUserEmail] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("saas_active_session");
+        if (saved) return JSON.parse(saved).email || "";
+      } catch (e) {}
+    }
+    return "";
+  });
 
   const [loginUser, setLoginUser] = useState("");
   const [loginPass, setLoginPass] = useState("");
@@ -217,7 +252,7 @@ export default function Home() {
     setIsMounted(true);
     const initializeApp = async () => {
       const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
+      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || currentCompany?.slug || "studio-hair";
       const masterBypassParam = params.get("master_bypass");
       const storedBypass = localStorage.getItem("master_bypass_auth");
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
@@ -231,7 +266,7 @@ export default function Home() {
       }
 
       if (!found) {
-        found = {
+        found = currentCompany || {
           slug: "studio-hair",
           company_name: "Studio Hair & Beauty",
           status: "Ativo",
@@ -246,6 +281,7 @@ export default function Home() {
 
       if (found) {
         setCurrentCompany(found);
+        localStorage.setItem("saas_active_session_company", JSON.stringify(found));
         setSalonConfig(prev => ({ ...prev, name: found.company_name || found.companyName || "Studio Hair & Beauty" }));
         setIsTenantBlocked(found.status === "Bloqueado");
         loadTenantData(found.slug);
@@ -258,19 +294,6 @@ export default function Home() {
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
-        } else {
-          const savedSession = localStorage.getItem("saas_active_session");
-          if (savedSession) {
-            try {
-              const sessionData = JSON.parse(savedSession);
-              if (sessionData) {
-                setActiveUserName(sessionData.name);
-                setActiveUserRole(sessionData.role);
-                setActiveUserEmail(sessionData.email);
-                setIsLogged(true);
-              }
-            } catch (e) {}
-          }
         }
       }
     };
@@ -305,6 +328,7 @@ export default function Home() {
           const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
           if (freshFound) {
             setCurrentCompany(freshFound);
+            localStorage.setItem("saas_active_session_company", JSON.stringify(freshFound));
             setIsTenantBlocked(freshFound.status === "Bloqueado");
           }
         } catch (e) {}
@@ -430,6 +454,7 @@ export default function Home() {
   const updateCompanyInMasterDb = async (updatedFields: any) => {
     const updatedCompany = { ...currentCompany, ...updatedFields };
     setCurrentCompany(updatedCompany);
+    localStorage.setItem("saas_active_session_company", JSON.stringify(updatedCompany));
     if (updatedFields.companyName || updatedFields.company_name) {
       setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
     }
@@ -497,13 +522,14 @@ export default function Home() {
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
 
-        // Salva sessão ativa
+        // Salva sessão ativa para resistir ao F5
         localStorage.setItem("saas_active_session", JSON.stringify({
           slug: authCompany.slug,
           name: matchedName,
           role: matchedRole,
           email: matchedEmail
         }));
+        localStorage.setItem("saas_active_session_company", JSON.stringify(authCompany));
 
         setSalonConfig(prev => ({ ...prev, name: authCompany.company_name || authCompany.companyName }));
         await loadTenantData(authCompany.slug);
@@ -531,6 +557,7 @@ export default function Home() {
     recordSystemLog("Logout do sistema realizado");
     localStorage.removeItem("saas_active_tenant");
     localStorage.removeItem("saas_active_session");
+    localStorage.removeItem("saas_active_session_company");
     localStorage.removeItem("master_bypass_auth");
     localStorage.removeItem("master_bypass_slug");
     localStorage.removeItem("master_bypass_login_name");
