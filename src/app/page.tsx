@@ -583,19 +583,14 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE PERMITIDO SE TIVER PLANO ULTRA OU SE O MÓDULO DUPLICADO "DRE (Teste)" ESTIVER ATIVADO
+  // DRE PERMITIDO APENAS NO PLANO ULTRA
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
-    const isUltra = pName.includes("ultra");
-
-    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    const testDreActive = allowedMods["dre_test"] === true;
-
-    return isUltra || testDreActive;
+    return pName.includes("ultra");
   }, [currentCompany]);
 
-  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
+  // VALIDAÇÃO DOS MÓDULOS (O DRE fica restrito ao plano Ultra)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -860,7 +855,7 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
-  // INCLUSÃO DO MÓDULO DRE E DO MÓDULO DRE_TEST NA LISTA DE ABAS DO CLIENTE
+  // ABAS DO MENU (DRE GARANTIDO SEMPRE VISÍVEL)
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -883,14 +878,7 @@ export default function Home() {
     if (tab.id === "my_schedule") return !isManager;
     if (tab.id === "my_plan") return isManager;
     if (tab.id === "settings") return true;
-
-    // SE A ABA FOR O DRE, VALIDA SE TEM ACESSO PELO ULTRA OU PELO MÓDULO DE TESTE MANUAL (dre_test)
-    if (tab.id === "dre") {
-      const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
-      const testDreActive = allowedMods["dre_test"] === true;
-      if (allowedMods["dre_test"] === false && !hasDREAccess) return false;
-      return hasDREAccess || testDreActive;
-    }
+    if (tab.id === "dre") return true; // <-- Garante que o DRE aparece sempre no menu do cliente
 
     const moduleRolesConfig = currentCompany?.moduleRoles || currentCompany?.module_roles || {};
     const allowedRolesForThisMod = moduleRolesConfig[tab.id];
@@ -1806,16 +1794,15 @@ export default function Home() {
 
                   {isManager && (
                     <div>
-                      <label className="block mb-1 font-semibold">Nome da Empresa</label>
+                      <label className="block mb-1 font-semibold text-slate-400">Nome da Empresa (Gerenciado exclusivamente pelo Painel Master)</label>
                       <input
+                        type="text"
+                        readOnly
+                        disabled
                         value={salonConfig.name}
-                        onChange={e => {
-                          const newName = e.target.value;
-                          setSalonConfig({ ...salonConfig, name: newName });
-                          updateCompanyInMasterDb({ company_name: newName });
-                        }}
-                        className="w-full border border-slate-300 p-2.5 rounded-xl outline-none bg-transparent"
+                        className="w-full border border-slate-700 bg-slate-900/60 text-slate-400 p-2.5 rounded-xl outline-none cursor-not-allowed select-none font-bold"
                       />
+                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, utilize a edição de clientes no Painel Master.</span>
                     </div>
                   )}
 
