@@ -583,7 +583,7 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE PERMITIDO SE TIVER PLANO ULTRA OU SE O MÓDULO DUPLICADO "DRE (Teste)" ESTIVER ATIVADO NA NUVEM
+  // DRE PERMITIDO SE TIVER PLANO ULTRA OU SE O MÓDULO DUPLICADO "DRE (Teste)" ESTIVER ATIVADO
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -860,6 +860,7 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
+  // INCLUSÃO DO MÓDULO DRE E DO MÓDULO DRE_TEST NA LISTA DE ABAS DO CLIENTE
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -882,6 +883,14 @@ export default function Home() {
     if (tab.id === "my_schedule") return !isManager;
     if (tab.id === "my_plan") return isManager;
     if (tab.id === "settings") return true;
+
+    // SE A ABA FOR O DRE, VALIDA SE TEM ACESSO PELO ULTRA OU PELO MÓDULO DE TESTE MANUAL (dre_test)
+    if (tab.id === "dre") {
+      const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
+      const testDreActive = allowedMods["dre_test"] === true;
+      if (allowedMods["dre_test"] === false && !hasDREAccess) return false;
+      return hasDREAccess || testDreActive;
+    }
 
     const moduleRolesConfig = currentCompany?.moduleRoles || currentCompany?.module_roles || {};
     const allowedRolesForThisMod = moduleRolesConfig[tab.id];
@@ -1139,7 +1148,7 @@ export default function Home() {
                               <div key={idx} className="py-2.5 flex justify-between items-center">
                                 <div>
                                   <strong className="text-rose-500">{prod.name}</strong>
-                                  <span className="text-[10px] opacity-60 block">Mínimo: {prod.minStockLimit} un</span>
+                                  <span className="text-[10px] opacity-60 block">Mín: {prod.minStockLimit} un</span>
                                 </div>
                                 <span className="font-black text-rose-500">{prod.currentStock} un restantes</span>
                               </div>
@@ -2600,7 +2609,7 @@ export default function Home() {
                   <div><label className="font-bold block mb-1">Valor (R$)</label><input type="number" step="0.01" value={formGrossValue} onChange={e => setFormGrossValue(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
                   <div>
                     <label className="font-bold block mb-1">Pagamento</label>
-                    <select value={formPaymentMethod} onChange={e => formPaymentMethod && setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                    <select value={formPaymentMethod} onChange={e => setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
                       <option value="Pix">Pix</option>
                       <option value="Cartão de Crédito">Cartão de Crédito</option>
                       <option value="Cartão de Débito">Cartão de Débito</option>
