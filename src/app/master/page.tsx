@@ -461,12 +461,11 @@ export default function MasterPanel() {
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
-      // Enviando exclusivamente chaves limpas permitidas na tabela do Supabase
+      // Enviamos apenas allowed_modules para evitar erros de colunas inexistentes no banco
       const { error } = await supabase
         .from('tenants')
         .update({
-          allowed_modules: tempAllowedModules,
-          module_roles: tempModuleRoles
+          allowed_modules: tempAllowedModules
         })
         .eq('slug', selectedTenant.slug);
 
@@ -486,6 +485,7 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
+  // LÓGICA DO TRIAL: Altera temporariamente o plano para "Ultra" sem alterar a mensalidade financeira cobrada
   const toggleTenantModuleTrial = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -497,14 +497,19 @@ export default function MasterPanel() {
 
     const updatedModules = {
       ...currentAllowed,
-      [moduleId]: nextState
+      [moduleId]: nextState,
+      dre: nextState
     };
+
+    // Altera o plano para Ultra no trial para liberar todas as funções do Ultra instantaneamente no board do cliente
+    const targetPlanName = nextState ? "Ultra" : (selectedTenant.planName === "Ultra" ? "Pro" : selectedTenant.planName);
 
     setTempAllowedModules(updatedModules);
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
       ...t, 
-      allowedModules: updatedModules 
+      allowedModules: updatedModules,
+      planName: targetPlanName
     } : t);
     
     setTenants(updatedList);
@@ -515,17 +520,17 @@ export default function MasterPanel() {
         .from('tenants')
         .update({
           allowed_modules: updatedModules,
+          plan_name: targetPlanName,
           dre_trial_expires_at: expirationDate,
-          ...(moduleId === 'dre' ? { dre: nextState } : {})
+          dre: nextState
         })
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Trial de Módulo [${moduleId}] ${nextState ? `Liberado por ${trialDaysInput} dias` : 'Revogado'}`);
+    logAction(selectedTenant.companyName, `Trial de Módulo [${moduleId}] ${nextState ? `Liberado por ${trialDaysInput} dias (Modo Ultra Ativo)` : 'Revogado'}`);
     setFeedbackMsg(`👑 Trial do DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'desativado!'}`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
-
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>, invoiceId: string) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTenant) return;
