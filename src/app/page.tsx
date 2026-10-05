@@ -247,7 +247,8 @@ export default function Home() {
           ...found,
           companyName: found.company_name || found.companyName,
           planName: found.plan_name || found.planName,
-          allowedModules: found.allowed_modules || found.allowedModules || {}
+          allowedModules: found.allowed_modules || found.allowedModules || {},
+          moduleRoles: found.module_roles || found.moduleRoles || {}
         };
 
         setCurrentCompany(normalizedFound);
@@ -303,7 +304,8 @@ export default function Home() {
               ...freshFound,
               companyName: freshFound.company_name || freshFound.companyName,
               planName: freshFound.plan_name || freshFound.planName,
-              allowedModules: freshFound.allowed_modules || freshFound.allowedModules || {}
+              allowedModules: freshFound.allowed_modules || freshFound.allowedModules || {},
+              moduleRoles: freshFound.module_roles || freshFound.moduleRoles || {}
             };
 
             setCurrentCompany(normalizedTenant);
@@ -504,7 +506,8 @@ export default function Home() {
           ...authCompany,
           companyName: authCompany.company_name || authCompany.companyName,
           planName: authCompany.plan_name || authCompany.planName,
-          allowedModules: authCompany.allowed_modules || authCompany.allowedModules || {}
+          allowedModules: authCompany.allowed_modules || authCompany.allowedModules || {},
+          moduleRoles: authCompany.module_roles || authCompany.moduleRoles || {}
         };
 
         setCurrentCompany(normalizedAuth);
@@ -580,7 +583,6 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // SOBERANIA DO MÓDULO DRE (BLINDADA CONTRA QUALQUER FORMATO DO MASTER)
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -590,7 +592,6 @@ export default function Home() {
     const rootDre = currentCompany.dre === true || currentCompany.allow_dre === true;
     const trialAllowed = allowedMods.dre === true || allowedMods.DRE === true;
 
-    // Validação de expiração do Trial (se houver data cadastrada)
     const expiresAt = currentCompany.dre_trial_expires_at || currentCompany.dreTrialExpiresAt;
     const notExpired = expiresAt ? new Date().getTime() < new Date(expiresAt).getTime() : true;
 
@@ -623,7 +624,7 @@ export default function Home() {
     const todaySales = sales.filter(s => s.date === todayStr && s.status === "Concluída");
 
     const totalTodayRevenue = todayAttendances.reduce((acc, a) => acc + (Number(a.netValue) || 0), 0) +
-                            todaySales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+                              todaySales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
 
     const month = salonConfig.analysisMonth;
     const monthlyAttendances = attendances.filter(a => a.date?.startsWith(month) && a.status === "Atendido");
@@ -636,7 +637,7 @@ export default function Home() {
     const weeklyAttendances = attendances.filter(a => new Date(a.date) >= weekAgo && a.status === "Atendido");
     const weeklySales = sales.filter(s => new Date(s.date) >= weekAgo && s.status === "Concluída");
     const totalWeeklyRevenue = weeklyAttendances.reduce((sum, a) => sum + (Number(a.netValue) || 0), 0) +
-                               weeklySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+                           weeklySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
     const lowStockItems = stockSummary.filter(p => p.needsRestock);
 
@@ -833,9 +834,52 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
+  const allTabs = [
+    ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
+    { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
+    { id: "atendimentos", label: "Atendimentos", icon: <CheckCircle2 size={17} /> },
+    ...(isManager ? [{ id: "services", label: "Serviços & Preços", icon: <Scissors size={17} /> }] : []),
+    ...(isManager ? [{ id: "promotions", label: "Promoções & Descontos", icon: <Tag size={17} /> }] : []),
+    { id: "pos", label: "Vendas", icon: <ShoppingBag size={17} /> },
+    { id: "stock", label: "Estoque & Alertas", icon: <Boxes size={17} /> },
+    ...(isManager ? [{ id: "expenses", label: "Despesas Operacionais", icon: <TrendingDown size={17} /> }] : []),
+    ...(isManager ? [{ id: "team", label: "Equipe de Colaboradores", icon: <Briefcase size={17} /> }] : []),
+    { id: "customers", label: "Base de Clientes", icon: <UsersIcon size={17} /> },
+    { id: "my_schedule", label: "Meu Banco de Horas & Funções", icon: <Clock size={17} /> },
+    { id: "dre", label: "Módulo DRE Gerencial", icon: <PieChart size={17} /> },
+    { id: "my_plan", label: "Meu Plano & Consultorias", icon: <Award size={17} /> },
+    { id: "settings", label: "Configurações", icon: <SettingsIcon size={17} /> }
+  ];
+
+  const visibleTabs = allTabs.filter(tab => {
+    if (!currentCompany) return true;
+    if (tab.id === "my_schedule") return !isManager;
+    if (tab.id === "my_plan") return isManager;
+    if (tab.id === "settings") return true;
+
+    const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
+    const moduleRolesConfig = currentCompany?.moduleRoles || currentCompany?.module_roles || {};
+
+    const isModuleActive = allowedMods[tab.id] ?? true;
+    if (!isModuleActive) return false;
+
+    const allowedRolesForThisMod = moduleRolesConfig[tab.id];
+    if (Array.isArray(allowedRolesForThisMod)) {
+      const userRoleNormalized = activeUserRole.trim();
+      const hasRolePerm = allowedRolesForThisMod.some((r: string) => r.toLowerCase() === userRoleNormalized.toLowerCase());
+      if (!hasRolePerm) return false;
+    }
+
+    if (tab.id === "dre") {
+      const pName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
+      return pName.includes("ultra") || allowedMods.dre === true;
+    }
+
+    return true;
+  });
+
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
 
-  // SOBERANIA ABSOLUTA: Bloqueio imediato na tela do cliente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
@@ -1053,40 +1097,6 @@ export default function Home() {
       </div>
     );
   }
-
-  const allTabs = [
-    ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
-    { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
-    { id: "atendimentos", label: "Atendimentos", icon: <CheckCircle2 size={17} /> },
-    ...(isManager ? [{ id: "services", label: "Serviços & Preços", icon: <Scissors size={17} /> }] : []),
-    ...(isManager ? [{ id: "promotions", label: "Promoções & Descontos", icon: <Tag size={17} /> }] : []),
-    { id: "pos", label: "Vendas", icon: <ShoppingBag size={17} /> },
-    { id: "stock", label: "Estoque & Alertas", icon: <Boxes size={17} /> },
-    ...(isManager ? [{ id: "expenses", label: "Despesas Operacionais", icon: <TrendingDown size={17} /> }] : []),
-    ...(isManager ? [{ id: "team", label: "Equipe de Colaboradores", icon: <Briefcase size={17} /> }] : []),
-    { id: "customers", label: "Base de Clientes", icon: <UsersIcon size={17} /> },
-    { id: "my_schedule", label: "Meu Banco de Horas & Funções", icon: <Clock size={17} /> },
-    { id: "dre", label: "Módulo DRE Gerencial", icon: <PieChart size={17} /> },
-    { id: "my_plan", label: "Meu Plano & Consultorias", icon: <Award size={17} /> },
-    { id: "settings", label: "Configurações", icon: <SettingsIcon size={17} /> }
-  ];
-
-  const visibleTabs = allTabs.filter(tab => {
-    if (tab.id === "my_schedule") return !isManager;
-    if (tab.id === "my_plan") return isManager;
-    if (tab.id === "dre") return isManager;
-    const roleNormalized = activeUserRole.toLowerCase();
-    if (roleNormalized.includes("gestor") || roleNormalized.includes("gerente") || roleNormalized.includes("dono")) return true;
-    if (roleNormalized.includes("colaborador")) {
-      return ["calendar", "settings", "my_schedule"].includes(tab.id);
-    }
-    const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
-    if (tab.id === "dre") {
-      const pName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
-      return pName.includes("ultra") || allowedMods.dre === true;
-    }
-    return allowedMods[tab.id] !== false;
-  });
 
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative`}>
@@ -2086,7 +2096,7 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Modais do Sistema */}
+      {/* Modais do Sistema do Cliente */}
       {isWidgetCustomizerOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
@@ -2197,7 +2207,7 @@ export default function Home() {
         </div>
       )}
 
-      {isConsultancyModalOpen && (
+   {isConsultancyModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
             <div className="border-b pb-3 flex justify-between items-center">

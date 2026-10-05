@@ -138,7 +138,6 @@ const MASTER_PLANS_LIST = [
   { name: "Consultoria Avulsa", price: 120.00, desc: "Sessão única de consultoria" }
 ];
 
-// Mapeamento dos módulos permitidos por padrão para cada plano
 const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
   "Básico": {
     dashboard: true,
@@ -245,6 +244,10 @@ export default function MasterPanel() {
   const [invoiceAmount, setInvoiceAmount] = useState(0);
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceStatus, setInvoiceStatus] = useState<"Aberto" | "Pago" | "Vencido">("Aberto");
+
+  // Estados locais para gerenciar as alterações de módulos e cargos antes de salvar
+  const [tempAllowedModules, setTempAllowedModules] = useState<any>({});
+  const [tempModuleRoles, setTempModuleRoles] = useState<any>({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -366,7 +369,14 @@ export default function MasterPanel() {
     return tenants.find((t) => t.id === selectedTenantId) || tenants[0] || null;
   }, [tenants, selectedTenantId]);
 
-  // Faturas ordenadas de forma crescente (antigas embaixo / recentes em cima ou vice-versa, ajustado para as antigas irem descendo)
+  // Sincroniza os dados locais de módulos e cargos sempre que selecionar um tenant diferente
+  useEffect(() => {
+    if (selectedTenant) {
+      setTempAllowedModules(selectedTenant.allowedModules || {});
+      setTempModuleRoles(selectedTenant.moduleRoles || {});
+    }
+  }, [selectedTenantId, selectedTenant]);
+
   const sortedInvoices = useMemo(() => {
     if (!selectedTenant || !selectedTenant.invoices) return [];
     return [...selectedTenant.invoices].sort((a, b) => a.referenceMonth.localeCompare(b.referenceMonth));
@@ -435,79 +445,70 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  const toggleTenantModule = async (moduleId: string) => {
+  const handleToggleModuleLocal = (moduleId: string) => {
+    setTempAllowedModules((prev: any) => ({
+      ...prev,
+      [moduleId]: !(prev[moduleId] ?? true)
+    }));
+  };
+
+  const handleToggleRoleLocal = (moduleId: string, roleName: string) => {
+    const currentRoles = tempModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
+    let updated = [];
+    if (currentRoles.includes(roleName)) {
+      updated = currentRoles.filter((r: string) => r !== roleName);
+    } else {
+      updated = [...currentRoles, roleName];
+    }
+    setTempModuleRoles((prev: any) => ({
+      ...prev,
+      [moduleId]: updated
+    }));
+  };
+
+  // BOTÃO SALVAR DEFINITIVO (Com envio garantido ao Supabase)
+  const handleSaveModulesAndRoles = async () => {
     if (!selectedTenant) return;
-    const currentAllowed = selectedTenant.allowedModules || {};
-    const nextState = !(currentAllowed[moduleId] ?? false);
-    
-    const expirationDate = nextState 
-      ? new Date(Date.now() + trialDaysInput * 24 * 60 * 60 * 1000).toISOString() 
-      : null;
 
-    const updatedModules = {
-      ...currentAllowed,
-      [moduleId]: nextState
-    };
+    const updatedList = tenants.map(t => {
+      if (t.id === selectedTenant.id) {
+        return {
+          ...t,
+          allowedModules: tempAllowedModules,
+          moduleRoles: tempModuleRoles
+        };
+      }
+      return t;
+    });
 
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
-      ...t, 
-      allowedModules: updatedModules 
-    } : t);
-    
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('tenants')
         .update({
-          allowed_modules: updatedModules,
-          allowedModules: updatedModules,
-          dre_trial_expires_at: expirationDate,
-          ...(moduleId === 'dre' ? { dre: nextState } : {})
+          allowed_modules: tempAllowedModules,
+          allowedModules: tempAllowedModules,
+          module_roles: tempModuleRoles,
+          moduleRoles: tempModuleRoles
         })
         .eq('slug', selectedTenant.slug);
-    } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${nextState ? `Liberado em Trial por ${trialDaysInput} dias` : 'Revogado'}`);
-    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'bloqueado!'}`);
+      if (error) {
+        console.error("Erro ao salvar no Supabase:", error);
+        alert("Erro ao salvar na nuvem. Verifique a conexão.");
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    logAction(selectedTenant.companyName, "Salvou manualmente as permissões de módulos e cargos");
+    setFeedbackMsg("💾 Alterações de módulos salvas com sucesso no banco!");
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  const toggleModuleRoleAccess = async (moduleId: string, roleName: string) => {
-    if (!selectedTenant) return;
-    const currentModuleRoles = selectedTenant.moduleRoles || {};
-    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
-    
-    let updatedRolesForModule = [];
-    if (rolesForModule.includes(roleName)) {
-      updatedRolesForModule = rolesForModule.filter((r: string) => r !== roleName);
-    } else {
-      updatedRolesForModule = [...rolesForModule, roleName];
-    }
-
-    const updatedModuleRoles = {
-      ...currentModuleRoles,
-      [moduleId]: updatedRolesForModule
-    };
-
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, moduleRoles: updatedModuleRoles } : t);
-    setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ module_roles: updatedModuleRoles, moduleRoles: updatedModuleRoles })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
-
-    logAction(selectedTenant.companyName, `Atualizou permissão do cargo [${roleName}] no módulo [${moduleId}]`);
-    setFeedbackMsg(`✅ Permissões de cargo atualizadas!`);
-    setTimeout(() => setFeedbackMsg(""), 2500);
-  };
-
-  // GERAR PRÓXIMA FATURA SEM DUPLICIDADE (Avança exatamente 1 mês da última gerada)
   const handleGenerateNextInvoice = async () => {
     if (!selectedTenant) return;
     const invoices = selectedTenant.invoices || [];
@@ -516,7 +517,6 @@ export default function MasterPanel() {
     let nextMonthNum = 11;
 
     if (invoices.length > 0) {
-      // Ordena para pegar cronologicamente a última fatura gerada
       const sorted = [...invoices].sort((a, b) => a.referenceMonth.localeCompare(b.referenceMonth));
       const lastInv = sorted[sorted.length - 1];
       const [yStr, mStr] = (lastInv.referenceMonth || "2026-10").split("-");
@@ -574,12 +574,10 @@ export default function MasterPanel() {
     setIsEditTenantModalOpen(true);
   };
 
-  // ATUALIZAR DADOS DA EMPRESA + RESTRINGIR OU ABRIR MÓDULOS DE ACORDO COM O PLANO (UPGRADE / DOWNGRADE)
   const handleSaveTenantEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTenant) return;
 
-    // Aplica os módulos padrão do plano selecionado (Básico, Pro, Ultra)
     const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
     const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
 
@@ -626,7 +624,7 @@ export default function MasterPanel() {
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
-    const confirmName = prompt(`⚠️️ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
+    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
     
     if (confirmName !== selectedTenant.companyName) {
       alert("Nome incorreto. A exclusão foi cancelada por segurança.");
@@ -1123,14 +1121,16 @@ export default function MasterPanel() {
                           <Sparkle size={13} /> Módulo DRE (Trial / Teste)
                         </span>
                         <button
-                          onClick={() => toggleTenantModule("dre")}
+                          onClick={() => {
+                            handleToggleModuleLocal("dre");
+                          }}
                           className={`font-bold text-xs px-3 py-2 rounded-lg border transition cursor-pointer ${
-                            selectedTenant.allowedModules?.dre 
+                            tempAllowedModules?.dre 
                               ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30" 
                               : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
                           }`}
                         >
-                          {selectedTenant.allowedModules?.dre ? "Desativar Trial" : `Liberar por ${trialDaysInput} dias`}
+                          {tempAllowedModules?.dre ? "Desativar Trial" : `Liberar por ${trialDaysInput} dias`}
                         </button>
                       </div>
 
@@ -1212,20 +1212,33 @@ export default function MasterPanel() {
 
                 {activeTab === "modulos" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
-                    <div>
-                      <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
-                      <p className="text-slate-400 text-[11px]">Gerencie permissões granulares para Dono, Gestor e Colaborador.</p>
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <div>
+                        <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
+                        <p className="text-slate-400 text-[11px]">Faça as alterações desejadas e clique em salvar para registrar no sistema.</p>
+                      </div>
+                      <button 
+                        onClick={handleSaveModulesAndRoles} 
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5"
+                      >
+                        <Save size={15} /> Salvar Alterações de Acesso
+                      </button>
                     </div>
+
                     <div className="space-y-3">
                       {moduleNames.map(m => {
-                        const isEn = selectedTenant.allowedModules?.[m.id] ?? true;
-                        const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor", "Colaborador"];
+                        const isEn = tempAllowedModules[m.id] ?? true;
+                        const allowedRolesForMod = tempModuleRoles[m.id] || ["Dono", "Gestor", "Colaborador"];
 
                         return (
                           <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                             <div className="flex justify-between items-center">
                               <span className="font-bold text-white text-sm">{m.label}</span>
-                              <button onClick={() => toggleTenantModule(m.id)} className={`px-3 py-1 rounded-lg font-bold text-[11px] cursor-pointer ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-slate-800 text-slate-500"}`}>
+                              <button 
+                                type="button"
+                                onClick={() => handleToggleModuleLocal(m.id)} 
+                                className={`px-3 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"}`}
+                              >
                                 {isEn ? "Módulo Ativo" : "Módulo Bloqueado"}
                               </button>
                             </div>
@@ -1238,7 +1251,7 @@ export default function MasterPanel() {
                                   <button
                                     key={r}
                                     type="button"
-                                    onClick={() => toggleModuleRoleAccess(m.id, r)}
+                                    onClick={() => handleToggleRoleLocal(m.id, r)}
                                     className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer border ${
                                       hasRoleAccess 
                                         ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300" 
