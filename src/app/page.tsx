@@ -583,27 +583,19 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE EXCLUSIVO DO PLANO ULTRA OU TESTE VÁLIDO
+  // DRE PERMITIDO SE TIVER PLANO ULTRA OU SE O MÓDULO DUPLICADO "DRE (Teste)" ESTIVER ATIVADO NA NUVEM
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
-    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    
-    // Se o Master desativou explicitamente no Master Control
-    if (allowedMods["dre"] === false) {
-      return false;
-    }
-
-    const trialActive = allowedMods.isTrialActive === true;
-    const trialExpiresAt = currentCompany.trial_expires_at || currentCompany.trialExpiresAt;
-    const trialValid = trialActive && (!trialExpiresAt || new Date().getTime() < new Date(trialExpiresAt).getTime());
-
-    if (trialValid) return true;
-
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
-    return pName.includes("ultra");
+    const isUltra = pName.includes("ultra");
+
+    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    const testDreActive = allowedMods["dre_test"] === true;
+
+    return isUltra || testDreActive;
   }, [currentCompany]);
 
-  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém o estado salvo após o F5)
+  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -611,16 +603,6 @@ export default function Home() {
     }
 
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    
-    // Verifica se há um período de teste (Trial) ativo e não expirado para liberar tudo
-    const trialActive = allowedMods.isTrialActive === true;
-    const trialExpiresAt = currentCompany.trial_expires_at || currentCompany.trialExpiresAt;
-    const trialValid = trialActive && (!trialExpiresAt || new Date().getTime() < new Date(trialExpiresAt).getTime());
-
-    if (trialValid) {
-      return true;
-    }
-
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isBasic = pName.includes("básico") || pName.includes("basico");
 
@@ -2618,7 +2600,7 @@ export default function Home() {
                   <div><label className="font-bold block mb-1">Valor (R$)</label><input type="number" step="0.01" value={formGrossValue} onChange={e => setFormGrossValue(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
                   <div>
                     <label className="font-bold block mb-1">Pagamento</label>
-                    <select value={formPaymentMethod} onChange={e => setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                    <select value={formPaymentMethod} onChange={e => formPaymentMethod && setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
                       <option value="Pix">Pix</option>
                       <option value="Cartão de Crédito">Cartão de Crédito</option>
                       <option value="Cartão de Débito">Cartão de Débito</option>
