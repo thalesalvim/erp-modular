@@ -200,7 +200,7 @@ export default function MasterPanel() {
       try {
         const { data, error } = await supabase.from('tenants').select('*');
         if (!error && data && data.length > 0) {
-          const formatted = data.map((t: any) => ({
+          const formatted: TenantAccount[] = data.map((t: any) => ({
             id: t.id || `t-${Math.random()}`,
             slug: t.slug || "studio-hair",
             companyName: t.company_name || t.companyName || "Empresa",
@@ -211,7 +211,7 @@ export default function MasterPanel() {
             planName: t.plan_name || t.planName || "Pro",
             monthlyFee: Number(t.monthly_fee || t.monthlyFee || 149.90),
             dueDay: Number(t.due_day || t.dueDay || 10),
-            status: t.status || "Ativo",
+            status: (t.status || "Ativo") as "Ativo" | "Bloqueado" | "Pendente" | "Cancelado",
             autoBlockGraceDays: 5,
             allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
             invoices: t.invoices || [],
@@ -229,40 +229,32 @@ export default function MasterPanel() {
             setSelectedTenantId(formatted[0].id);
           }
         } else {
-          // Se a nuvem falhar ou vier vazia, carrega do localStorage para nunca sumir
-          const saved = localStorage.getItem("saas_tenants_db");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setTenants(parsed);
-            if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
-          } else {
-            const defaultTenant: TenantAccount = {
-              id: "tenant-1",
-              slug: "studio-hair",
-              companyName: "Studio Hair & Beauty",
-              document: "12.345.678/0001-99",
-              ownerName: "Gisele Alvim",
-              ownerEmail: "gisele@gmail.com",
-              ownerPhone: "19999999999",
-              planName: "Pro",
-              monthlyFee: 149.90,
-              dueDay: 10,
-              status: "Ativo",
-              autoBlockGraceDays: 5,
-              allowedModules: { dre: true },
-              invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
-              logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
-              contractDocument: null,
-              internalNotes: "Contrato ativo.",
-              logoType: "icon",
-              logoIcon: "scissors",
-              primaryColor: "pink",
-              createdAt: "2026-01-01"
-            };
-            setTenants([defaultTenant]);
-            setSelectedTenantId(defaultTenant.id);
-            localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
-          }
+          const defaultTenant: TenantAccount = {
+            id: "tenant-1",
+            slug: "studio-hair",
+            companyName: "Studio Hair & Beauty",
+            document: "12.345.678/0001-99",
+            ownerName: "Gisele Alvim",
+            ownerEmail: "gisele@gmail.com",
+            ownerPhone: "19999999999",
+            planName: "Pro",
+            monthlyFee: 149.90,
+            dueDay: 10,
+            status: "Ativo",
+            autoBlockGraceDays: 5,
+            allowedModules: { dre: true },
+            invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
+            logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
+            contractDocument: null,
+            internalNotes: "Contrato ativo.",
+            logoType: "icon",
+            logoIcon: "scissors",
+            primaryColor: "pink",
+            createdAt: "2026-01-01"
+          };
+          setTenants([defaultTenant]);
+          setSelectedTenantId(defaultTenant.id);
+          localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
         }
       } catch (err) {
         const saved = localStorage.getItem("saas_tenants_db");
@@ -362,11 +354,10 @@ export default function MasterPanel() {
     }
   };
 
-  // Bloqueio ultra-resiliente com atualização síncrona de estado e nuvem
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
-    const nextStatus = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
+    const nextStatus: "Ativo" | "Bloqueado" = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
 
     const updatedList = tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t);
     setTenants(updatedList);
@@ -384,7 +375,6 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
-  // Ativação/Desativação de Módulo DRE ultra-resiliente
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -697,11 +687,11 @@ export default function MasterPanel() {
       plan_name: newPlan,
       monthly_fee: Number(newFee) || 149.90,
       due_day: Number(newDueDay) || 10,
-      status: "Ativo",
+      status: "Ativo" as const,
       allowed_modules: { dre: true, dashboard: true, calendar: true },
       allowedModules: { dre: true, dashboard: true, calendar: true },
-      invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
-      logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
+      invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
+      logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
       internalNotes: "Novo contrato cadastrado com ambiente seguro.",
       logo_type: "icon",
       logo_icon: "scissors",
