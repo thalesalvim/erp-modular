@@ -123,47 +123,12 @@ export default function Home() {
   });
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
-  const [currentCompany, setCurrentCompany] = useState<any>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("saas_active_session_company");
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return null;
-  });
-
+  const [currentCompany, setCurrentCompany] = useState<any>(null);
   const [isMasterBypassActive, setIsMasterBypassActive] = useState(false);
   
-  const [activeUserName, setActiveUserName] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("saas_active_session");
-        if (saved) return JSON.parse(saved).name || "Gestor";
-      } catch (e) {}
-    }
-    return "Gestor";
-  });
-
-  const [activeUserRole, setActiveUserRole] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("saas_active_session");
-        if (saved) return JSON.parse(saved).role || "Gestor";
-      } catch (e) {}
-    }
-    return "Gestor";
-  });
-
-  const [activeUserEmail, setActiveUserEmail] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("saas_active_session");
-        if (saved) return JSON.parse(saved).email || "";
-      } catch (e) {}
-    }
-    return "";
-  });
+  const [activeUserName, setActiveUserName] = useState<string>("Gestor");
+  const [activeUserRole, setActiveUserRole] = useState<string>("Gestor");
+  const [activeUserEmail, setActiveUserEmail] = useState<string>("");
 
   const [loginUser, setLoginUser] = useState("");
   const [loginPass, setLoginPass] = useState("");
@@ -246,11 +211,12 @@ export default function Home() {
     } catch (e) {}
   };
 
+  // CHETAGEM SOBERANA INICIAL NA NUVEM
   useEffect(() => {
     setIsMounted(true);
     const initializeApp = async () => {
       const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || currentCompany?.slug || "studio-hair";
+      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
       const masterBypassParam = params.get("master_bypass");
       const storedBypass = localStorage.getItem("master_bypass_auth");
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
@@ -264,7 +230,7 @@ export default function Home() {
       }
 
       if (!found) {
-        found = currentCompany || {
+        found = {
           slug: "studio-hair",
           company_name: "Studio Hair & Beauty",
           status: "Ativo",
@@ -279,9 +245,16 @@ export default function Home() {
 
       if (found) {
         setCurrentCompany(found);
-        localStorage.setItem("saas_active_session_company", JSON.stringify(found));
         setSalonConfig(prev => ({ ...prev, name: found.company_name || found.companyName || "Studio Hair & Beauty" }));
-        setIsTenantBlocked(found.status === "Bloqueado");
+        
+        // DECRETO ABSOLUTO: Se o status na nuvem for Bloqueado, corta o acesso na hora
+        if (found.status === "Bloqueado") {
+          setIsTenantBlocked(true);
+          setIsLogged(false);
+          localStorage.removeItem("saas_active_session");
+          return;
+        }
+
         loadTenantData(found.slug);
 
         if (masterBypassParam && masterBypassParam === storedBypass) {
@@ -292,31 +265,26 @@ export default function Home() {
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
+        } else {
+          const savedSession = localStorage.getItem("saas_active_session");
+          if (savedSession) {
+            try {
+              const sessionData = JSON.parse(savedSession);
+              if (sessionData) {
+                setActiveUserName(sessionData.name);
+                setActiveUserRole(sessionData.role);
+                setActiveUserEmail(sessionData.email);
+                setIsLogged(true);
+              }
+            } catch (e) {}
+          }
         }
       }
     };
     initializeApp();
-
-    const savedGoals = localStorage.getItem("saas_dashboard_goals");
-    if (savedGoals) {
-      try {
-        const parsedG = JSON.parse(savedGoals);
-        setGoals(parsedG);
-        setTempDailyGoal(parsedG.daily);
-        setTempWeeklyGoal(parsedG.weekly);
-        setTempMonthlyGoal(parsedG.monthly);
-      } catch (e) {}
-    }
-
-    const savedWidgets = localStorage.getItem("saas_dashboard_widgets");
-    if (savedWidgets) {
-      try {
-        setVisibleWidgets(JSON.parse(savedWidgets));
-      } catch (e) {}
-    }
   }, []);
 
-  // Sincronização Absoluta e Soberana (a cada 1 segundo): Respeita o comando do Master imediatamente
+  // MONITORAMENTO SOBERANO (A cada 1 segundo): O Rei manda, o servidor obedece instantaneamente
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
@@ -326,8 +294,13 @@ export default function Home() {
           const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
           if (freshFound) {
             setCurrentCompany(freshFound);
-            localStorage.setItem("saas_active_session_company", JSON.stringify(freshFound));
-            setIsTenantBlocked(freshFound.status === "Bloqueado");
+            if (freshFound.status === "Bloqueado") {
+              setIsTenantBlocked(true);
+              setIsLogged(false);
+              localStorage.removeItem("saas_active_session");
+            } else {
+              setIsTenantBlocked(false);
+            }
           }
         }
       } catch (e) {}
@@ -452,7 +425,6 @@ export default function Home() {
   const updateCompanyInMasterDb = async (updatedFields: any) => {
     const updatedCompany = { ...currentCompany, ...updatedFields };
     setCurrentCompany(updatedCompany);
-    localStorage.setItem("saas_active_session_company", JSON.stringify(updatedCompany));
     if (updatedFields.companyName || updatedFields.company_name) {
       setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
     }
@@ -526,7 +498,6 @@ export default function Home() {
           role: matchedRole,
           email: matchedEmail
         }));
-        localStorage.setItem("saas_active_session_company", JSON.stringify(authCompany));
 
         setSalonConfig(prev => ({ ...prev, name: authCompany.company_name || authCompany.companyName }));
         await loadTenantData(authCompany.slug);
@@ -554,7 +525,6 @@ export default function Home() {
     recordSystemLog("Logout do sistema realizado");
     localStorage.removeItem("saas_active_tenant");
     localStorage.removeItem("saas_active_session");
-    localStorage.removeItem("saas_active_session_company");
     localStorage.removeItem("master_bypass_auth");
     localStorage.removeItem("master_bypass_slug");
     localStorage.removeItem("master_bypass_login_name");
@@ -583,14 +553,14 @@ export default function Home() {
     });
   }, [products, stockMoves, sales]);
 
-  const availableStockForSale = useMemo => {
+  const availableStockForSale = useMemo(() => {
     return products;
   }, [products]);
 
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // Soberania do Módulo DRE: Verifica se o Plano é Ultra ou se o Master concedeu o Trial (`allowedModules.dre === true`)
+  // Soberania do Módulo DRE: Se o Master concedeu o Trial (`allowedModules.dre === true`) ou for Plano Ultra
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -840,7 +810,7 @@ export default function Home() {
 
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
-  // SOBERANIA ABSOLUTA: Se o Rei decretou bloqueio, o acesso é cortado imediatamente na tela do cliente
+  // SOBERANIA ABSOLUTA: Se o status na nuvem for Bloqueado, tranca tudo imediatamente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
