@@ -129,6 +129,13 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
+  // Estados para o fluxo de "Esqueci minha senha"
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotSearchQuery, setForgotSearchQuery] = useState("");
+  const [forgotSearchResult, setForgotSearchResult] = useState<any | null>(null);
+  const [forgotNewPass, setForgotNewPass] = useState("");
+  const [forgotStep, setForgotStep] = useState<"search" | "reset">("search");
+
   const [darkMode, setDarkMode] = useState(false);
 
   const bgClass = darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-800";
@@ -748,7 +755,6 @@ export default function Home() {
 
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
 
-  // SVG String do Logotipo "H" do HandyHub para Favicon e Marca d'Água
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
   if (isTenantBlocked) {
@@ -761,11 +767,6 @@ export default function Home() {
           <div className="pt-4 border-t border-slate-800 flex justify-end text-xs">
             <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar</span></button>
           </div>
-        </div>
-        {/* Marca d'água no canto inferior direito */}
-        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
-          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
         </div>
       </div>
     );
@@ -789,7 +790,22 @@ export default function Home() {
               <input type="text" required value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Seu e-mail ou usuário de acesso" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition" />
             </div>
             <div>
-              <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">Senha</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-slate-300 font-bold uppercase tracking-wider">Senha</label>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setForgotSearchQuery("");
+                    setForgotSearchResult(null);
+                    setForgotNewPass("");
+                    setForgotStep("search");
+                    setIsForgotModalOpen(true);
+                  }} 
+                  className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
+                >
+                  Esqueci minha senha?
+                </button>
+              </div>
               <input type="password" required value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••••" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition" />
             </div>
             <div className="pt-1">
@@ -806,11 +822,154 @@ export default function Home() {
             <span className="text-slate-500 font-medium">Ambiente Seguro Corporativo</span>
           </div>
         </div>
-        {/* Marca d'água no canto inferior direito */}
-        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
-          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
-        </div>
+
+        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE */}
+        {isForgotModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-xs text-white">
+              <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
+                <h2 className="text-sm font-bold flex items-center gap-2">
+                  <ShieldCheck className="text-indigo-400" size={18} />
+                  <span>Recuperação de Acesso • HandyHub</span>
+                </h2>
+                <button onClick={() => setIsForgotModalOpen(false)} className="text-slate-400 hover:text-white text-base cursor-pointer">✕</button>
+              </div>
+
+              {forgotStep === "search" ? (
+                <div className="space-y-4">
+                  <p className="text-slate-400">
+                    Não lembra seu e-mail? Digite o seu <strong>Nome completo</strong> ou parte do seu <strong>Usuário</strong> para localizarmos seu cadastro na base de dados.
+                  </p>
+                  
+                  <div className="space-y-2">
+                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Pesquisar por Nome ou E-mail</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Ex: Gisele Alvim ou gisele@..." 
+                        value={forgotSearchQuery} 
+                        onChange={e => setForgotSearchQuery(e.target.value)} 
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-indigo-500"
+                      />
+                      <button 
+                        type="button"
+                        onClick={async () => {
+                          if (!forgotSearchQuery.trim()) {
+                            alert("Informe um nome ou e-mail para pesquisar.");
+                            return;
+                          }
+                          try {
+                            const { data: tenants } = await supabase.from('tenants').select('*');
+                            if (!tenants) {
+                              alert("Nenhum registro encontrado na nuvem.");
+                              return;
+                            }
+
+                            let foundLogin: any = null;
+                            let targetTenant: any = null;
+                            const queryLower = forgotSearchQuery.trim().toLowerCase();
+
+                            for (const t of tenants) {
+                              const logins = t.logins || [];
+                              const match = logins.find((l: any) => 
+                                (l.name && l.name.toLowerCase().includes(queryLower)) ||
+                                (l.email && l.email.toLowerCase().includes(queryLower)) ||
+                                (l.user && l.user.toLowerCase().includes(queryLower))
+                              );
+                              if (match) {
+                                foundLogin = match;
+                                targetTenant = t;
+                                break;
+                              }
+                            }
+
+                            if (foundLogin && targetTenant) {
+                              setForgotSearchResult({ login: foundLogin, tenant: targetTenant });
+                              setForgotStep("reset");
+                            } else {
+                              alert("Nenhum usuário encontrado com este nome ou e-mail. Verifique os dados digitados.");
+                            }
+                          } catch (err) {
+                            alert("Erro ao pesquisar na nuvem.");
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer shadow transition"
+                      >
+                        Pesquisar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-indigo-400 block">Cadastro Localizado com Sucesso</span>
+                    <p className="text-white font-bold text-sm">{forgotSearchResult?.login?.name}</p>
+                    <p className="text-slate-300 text-[11px]">E-mail/Usuário: <strong>{forgotSearchResult?.login?.email || forgotSearchResult?.login?.user}</strong></p>
+                    <p className="text-slate-400 text-[11px]">Empresa: <strong>{forgotSearchResult?.tenant?.company_name}</strong></p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Digite a Nova Senha *</label>
+                    <input 
+                      type="password" 
+                      placeholder="Mínimo de 6 caracteres" 
+                      value={forgotNewPass} 
+                      onChange={e => setForgotNewPass(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button 
+                      type="button" 
+                      onClick={() => setForgotStep("search")} 
+                      className="w-1/3 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer transition"
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        if (!forgotNewPass || forgotNewPass.length < 3) {
+                          alert("Digite uma senha válida.");
+                          return;
+                        }
+
+                        const newHash = hashPassword(forgotNewPass);
+                        const targetTenant = forgotSearchResult.tenant;
+                        const targetEmail = forgotSearchResult.login.email || forgotSearchResult.login.user;
+
+                        const updatedLogins = targetTenant.logins.map((l: any) => {
+                          if ((l.email && l.email === targetEmail) || l.user === targetEmail || l.name === forgotSearchResult.login.name) {
+                            return { ...l, passwordHash: newHash };
+                          }
+                          return l;
+                        });
+
+                        const { error } = await supabase
+                          .from('tenants')
+                          .update({ logins: updatedLogins })
+                          .eq('slug', targetTenant.slug);
+
+                        if (error) {
+                          alert("Erro ao atualizar a senha na nuvem.");
+                          return;
+                        }
+
+                        alert("✅ Senha redefinida com sucesso! Agora você já pode entrar com sua nova senha.");
+                        setIsForgotModalOpen(false);
+                      }} 
+                      className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow transition"
+                    >
+                      Salvar Nova Senha
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -847,9 +1006,6 @@ export default function Home() {
 
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative`}>
-      {/* Injeção do Favicon no Head */}
-      <link rel="icon" href={handySvgDataUri} />
-
       <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-10">
         <div>
           {isMasterBypassActive && (
@@ -1835,12 +1991,6 @@ export default function Home() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Marca d'água corporativa HandyHub fixa no canto inferior direito de TODAS as páginas */}
-        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
-          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded shadow" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
         </div>
       </main>
 
