@@ -208,7 +208,6 @@ export default function MasterPanel() {
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [modalError, setModalError] = useState("");
 
-  const [trialDaysInput, setTrialDaysInput] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
@@ -251,9 +250,6 @@ export default function MasterPanel() {
   const [invoiceCardInput, setInvoiceCardInput] = useState("");
 
   const [collapsedInvoices, setCollapsedInvoices] = useState<{ [id: string]: boolean }>({});
-
-  const [tempAllowedModules, setTempAllowedModules] = useState<any>({});
-  const [tempModuleRoles, setTempModuleRoles] = useState<any>({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -347,13 +343,6 @@ export default function MasterPanel() {
     return tenants.find((t) => t.id === selectedTenantId) || tenants[0] || null;
   }, [tenants, selectedTenantId]);
 
-  useEffect(() => {
-    if (selectedTenant) {
-      setTempAllowedModules(selectedTenant.allowedModules || {});
-      setTempModuleRoles(selectedTenant.moduleRoles || {});
-    }
-  }, [selectedTenantId, selectedTenant]);
-
   const sortedInvoices = useMemo(() => {
     if (!selectedTenant || !selectedTenant.invoices) return [];
     return [...selectedTenant.invoices].sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
@@ -422,115 +411,72 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  const handleToggleModuleLocal = (moduleId: string) => {
-    setTempAllowedModules((prev: any) => ({
-      ...prev,
-      [moduleId]: !(prev[moduleId] ?? true)
-    }));
-  };
-
-  const handleToggleRoleLocal = (moduleId: string, roleName: string) => {
-    const currentRoles = tempModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
-    let updated = [];
-    if (currentRoles.includes(roleName)) {
-      updated = currentRoles.filter((r: string) => r !== roleName);
-    } else {
-      updated = [...currentRoles, roleName];
-    }
-    setTempModuleRoles((prev: any) => ({
-      ...prev,
-      [moduleId]: updated
-    }));
-  };
-
-  const handleSaveModulesAndRoles = async () => {
-    if (!selectedTenant) return;
-
-    const updatedList = tenants.map(t => {
-      if (t.id === selectedTenant.id) {
-        return {
-          ...t,
-          allowedModules: tempAllowedModules,
-          moduleRoles: tempModuleRoles
-        };
-      }
-      return t;
-    });
-
-    setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-    try {
-      // Enviamos apenas allowed_modules para evitar erros de colunas inexistentes no banco
-      const { error } = await supabase
-        .from('tenants')
-        .update({
-          allowed_modules: tempAllowedModules
-        })
-        .eq('slug', selectedTenant.slug);
-
-      if (error) {
-        console.error("Erro ao salvar no Supabase:", error);
-        alert(`Erro ao salvar na nuvem: ${error.message}`);
-        return;
-      }
-    } catch (e: any) {
-      console.error(e);
-      alert(`Erro de conexão com a nuvem: ${e?.message || e}`);
-      return;
-    }
-
-    logAction(selectedTenant.companyName, "Salvou manualmente as permissões de módulos e cargos");
-    setFeedbackMsg("💾 Alterações de módulos salvas com sucesso no banco!");
-    setTimeout(() => setFeedbackMsg(""), 3500);
-  };
-
-  // LÓGICA DO TRIAL: Altera temporariamente o plano para "Ultra" sem alterar a mensalidade financeira cobrada
-  const toggleTenantModuleTrial = async (moduleId: string) => {
+  // SALVAMENTO INSTANTÂNEO NA NUVEM (Usa selectedTenant diretamente sem tempAllowedModules)
+  const handleToggleModuleInstant = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
-    const nextState = !(currentAllowed[moduleId] ?? false);
-    
-    const expirationDate = nextState 
-      ? new Date(Date.now() + trialDaysInput * 24 * 60 * 60 * 1000).toISOString() 
-      : null;
+    const nextState = !(currentAllowed[moduleId] ?? true);
 
     const updatedModules = {
       ...currentAllowed,
-      [moduleId]: nextState,
-      dre: nextState
+      [moduleId]: nextState
     };
-
-    // Altera o plano para Ultra no trial para liberar todas as funções do Ultra instantaneamente no board do cliente
-    const targetPlanName = nextState ? "Ultra" : (selectedTenant.planName === "Ultra" ? "Pro" : selectedTenant.planName);
-
-    setTempAllowedModules(updatedModules);
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
       ...t, 
-      allowedModules: updatedModules,
-      planName: targetPlanName
+      allowedModules: updatedModules 
     } : t);
     
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('tenants')
         .update({
           allowed_modules: updatedModules,
-          plan_name: targetPlanName,
-          dre_trial_expires_at: expirationDate,
-          dre: nextState
+          ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
         .eq('slug', selectedTenant.slug);
-    } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Trial de Módulo [${moduleId}] ${nextState ? `Liberado por ${trialDaysInput} dias (Modo Ultra Ativo)` : 'Revogado'}`);
-    setFeedbackMsg(`👑 Trial do DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'desativado!'}`);
-    setTimeout(() => setFeedbackMsg(""), 3500);
+      if (error) {
+        console.error("Erro ao salvar módulo na nuvem:", error);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    logAction(selectedTenant.companyName, `Módulo [${moduleId}] alterado para ${nextState ? 'Ativo' : 'Bloqueado'} instantaneamente`);
+    setFeedbackMsg(`⚡ Módulo ${nextState ? 'ativado' : 'bloqueado'} com sucesso!`);
+    setTimeout(() => setFeedbackMsg(""), 2500);
   };
+
+  const handleToggleRoleInstant = async (moduleId: string, roleName: string) => {
+    if (!selectedTenant) return;
+    const currentModuleRoles = selectedTenant.moduleRoles || {};
+    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
+    
+    let updatedRolesForModule = [];
+    if (rolesForModule.includes(roleName)) {
+      updatedRolesForModule = rolesForModule.filter((r: string) => r !== roleName);
+    } else {
+      updatedRolesForModule = [...rolesForModule, roleName];
+    }
+
+    const updatedModuleRoles = {
+      ...currentModuleRoles,
+      [moduleId]: updatedRolesForModule
+    };
+
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, moduleRoles: updatedModuleRoles } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+    logAction(selectedTenant.companyName, `Alterou permissão do cargo [${roleName}] no módulo [${moduleId}]`);
+    setFeedbackMsg(`✅ Acesso do cargo ${roleName} atualizado!`);
+    setTimeout(() => setFeedbackMsg(""), 2000);
+  };
+
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>, invoiceId: string) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTenant) return;
@@ -1086,7 +1032,7 @@ export default function MasterPanel() {
     { id: "expenses", label: "Despesas Operacionais" },
     { id: "team", label: "Equipe de Colaboradoras" },
     { id: "customers", label: "Base de Clientes" },
-    { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra / Trial)" },
+    { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra)" },
     { id: "settings", label: "Configurações Gerais" }
   ];
 
@@ -1184,39 +1130,6 @@ export default function MasterPanel() {
                       <button onClick={() => launchTenantDashboard(selectedTenant)} className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"><Rocket size={14} /><span>Acessar Dashboard</span></button>
                       <button onClick={() => toggleTenantBlock(selectedTenant.id)} className={`text-xs font-bold px-3 py-2.5 rounded-xl border transition cursor-pointer ${selectedTenant.status === "Bloqueado" ? "bg-emerald-600/20 text-emerald-300 border-emerald-500/30" : "bg-rose-600/20 text-rose-300 border-rose-500/30"}`}>{selectedTenant.status === "Bloqueado" ? "Desbloquear" : "Bloquear"}</button>
                     </div>
-
-                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                          <Sparkle size={13} /> Módulo DRE (Trial / Teste)
-                        </span>
-                        <button
-                          onClick={() => toggleTenantModuleTrial("dre")}
-                          className={`font-bold text-xs px-3 py-2 rounded-lg border transition cursor-pointer ${
-                            selectedTenant.allowedModules?.dre 
-                              ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30" 
-                              : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-                          }`}
-                        >
-                          {selectedTenant.allowedModules?.dre ? "Desativar Trial" : `Liberar por ${trialDaysInput} dias`}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1 border-t border-slate-900 text-[11px]">
-                        <Clock size={12} className="text-slate-400" />
-                        <span className="text-slate-400">Duração do teste:</span>
-                        <select
-                          value={trialDaysInput}
-                          onChange={e => setTrialDaysInput(Number(e.target.value))}
-                          className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white font-bold outline-none cursor-pointer"
-                        >
-                          <option value={3}>3 dias</option>
-                          <option value={7}>7 dias</option>
-                          <option value={15}>15 dias</option>
-                          <option value={30}>30 dias</option>
-                        </select>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -1311,23 +1224,15 @@ export default function MasterPanel() {
 
                 {activeTab === "modulos" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <div>
-                        <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
-                        <p className="text-slate-400 text-[11px]">Faça as alterações desejadas e clique em salvar para registrar no sistema.</p>
-                      </div>
-                      <button 
-                        onClick={handleSaveModulesAndRoles} 
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5"
-                      >
-                        <Save size={15} /> Salvar Alterações de Acesso
-                      </button>
+                    <div className="border-b border-slate-800 pb-3">
+                      <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
+                      <p className="text-slate-400 text-[11px]">As alterações são salvas instantaneamente ao clicar nos botões.</p>
                     </div>
 
                     <div className="space-y-3">
                       {moduleNames.map(m => {
-                        const isEn = tempAllowedModules[m.id] ?? true;
-                        const allowedRolesForMod = tempModuleRoles[m.id] || ["Dono", "Gestor", "Colaborador"];
+                        const isEn = selectedTenant.allowedModules?.[m.id] ?? true;
+                        const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor", "Colaborador"];
 
                         return (
                           <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
@@ -1335,7 +1240,7 @@ export default function MasterPanel() {
                               <span className="font-bold text-white text-sm">{m.label}</span>
                               <button 
                                 type="button"
-                                onClick={() => handleToggleModuleLocal(m.id)} 
+                                onClick={() => handleToggleModuleInstant(m.id)} 
                                 className={`px-3 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"}`}
                               >
                                 {isEn ? "Módulo Ativo" : "Módulo Bloqueado"}
@@ -1350,7 +1255,7 @@ export default function MasterPanel() {
                                   <button
                                     key={r}
                                     type="button"
-                                    onClick={() => handleToggleRoleLocal(m.id, r)}
+                                    onClick={() => handleToggleRoleInstant(m.id, r)}
                                     className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer border ${
                                       hasRoleAccess 
                                         ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300" 
