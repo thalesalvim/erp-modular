@@ -858,6 +858,7 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
+  // DEIXAMOS A ABA DO DRE SEMPRE VISÍVEL NO MENU, IGUAL AOS OUTROS MÓDULOS!
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -880,13 +881,7 @@ export default function Home() {
     if (tab.id === "my_schedule") return !isManager;
     if (tab.id === "my_plan") return isManager;
     if (tab.id === "settings") return true;
-
-    if (tab.id === "dre") {
-      const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
-      const testDreActive = allowedMods["dre_test"] === true;
-      if (allowedMods["dre_test"] === false && !hasDREAccess) return false;
-      return hasDREAccess || testDreActive;
-    }
+    if (tab.id === "dre") return true; // Mantém visível no menu igual aos outros módulos
 
     const moduleRolesConfig = currentCompany?.moduleRoles || currentCompany?.module_roles || {};
     const allowedRolesForThisMod = moduleRolesConfig[tab.id];
@@ -1144,7 +1139,7 @@ export default function Home() {
                               <div key={idx} className="py-2.5 flex justify-between items-center">
                                 <div>
                                   <strong className="text-rose-500">{prod.name}</strong>
-                                  <span className="text-[10px] opacity-60 block">Mínimo: {prod.minStockLimit} un</span>
+                                  <span className="text-[10px] opacity-60 block">Mín: {prod.minStockLimit} un</span>
                                 </div>
                                 <span className="font-black text-rose-500">{prod.currentStock} un restantes</span>
                               </div>
@@ -1162,7 +1157,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden ${cardBgClass}`}>
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <h3 className="font-bold text-slate-900 text-sm">Agenda de Atendimentos</h3>
-                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
+                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(employees[0]?.name || ""); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
                     </div>
                     {filteredAppointments.length === 0 ? (
                       <div className="p-12 text-center opacity-60 text-xs">Nenhum agendamento marcado.</div>
