@@ -116,7 +116,7 @@ export interface TenantAccount {
   status: "Ativo" | "Bloqueado" | "Pendente" | "Cancelado";
   autoBlockGraceDays: number;
   allowedModules: { [key: string]: boolean };
-  moduleRoles?: { [key: string]: string[] };
+  moduleRoles?: { [key: string]: string[] }; // Controle de acesso por cargo
   invoices: TenantInvoice[];
   logins: TenantLogin[];
   contractDocument: ContractDocument | null;
@@ -162,8 +162,15 @@ export default function MasterPanel() {
   const [modalError, setModalError] = useState("");
 
   const [trialDaysInput, setTrialDaysInput] = useState(7);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Estados para edição de empresa na carteira
+  const [isEditTenantModalOpen, setIsEditTenantModalOpen] = useState(false);
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editOwnerName, setEditOwnerName] = useState("");
+  const [editOwnerEmail, setEditOwnerEmail] = useState("");
+  const [editOwnerPhone, setEditOwnerPhone] = useState("");
+  const [editMonthlyFee, setEditMonthlyFee] = useState(149.90);
 
   const [newCompany, setNewCompany] = useState("");
   const [newDocument, setNewDocument] = useState("");
@@ -213,6 +220,7 @@ export default function MasterPanel() {
             status: (t.status || "Ativo") as "Ativo" | "Bloqueado" | "Pendente" | "Cancelado",
             autoBlockGraceDays: 5,
             allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
+            moduleRoles: t.module_roles || t.moduleRoles || {},
             invoices: t.invoices || [],
             logins: t.logins || [],
             contractDocument: t.contractDocument || null,
@@ -242,6 +250,7 @@ export default function MasterPanel() {
             status: "Ativo",
             autoBlockGraceDays: 5,
             allowedModules: { dre: true },
+            moduleRoles: {},
             invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
             logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
             contractDocument: null,
@@ -374,7 +383,6 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // Função otimizada para liberar o Trial do DRE com validade e múltiplos formatos
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -407,13 +415,182 @@ export default function MasterPanel() {
           ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
         .eq('slug', selectedTenant.slug);
-    } catch (e) {
-      console.error("Erro ao atualizar módulo na nuvem:", e);
-    }
+    } catch (e) {}
 
     logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${nextState ? `Liberado em Trial por ${trialDaysInput} dias` : 'Revogado'}`);
     setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'bloqueado!'}`);
     setTimeout(() => setFeedbackMsg(""), 3500);
+  };
+
+  // GERENCIAR ACESSO POR CARGO (Dono, Gestor, Colaborador) nos módulos
+  const toggleModuleRoleAccess = async (moduleId: string, roleName: string) => {
+    if (!selectedTenant) return;
+    const currentModuleRoles = selectedTenant.moduleRoles || {};
+    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor"]; // Padrão
+    
+    let updatedRolesForModule = [];
+    if (rolesForModule.includes(roleName)) {
+      updatedRolesForModule = rolesForModule.filter((r: string) => r !== roleName);
+    } else {
+      updatedRolesForModule = [...rolesForModule, roleName];
+    }
+
+    const updatedModuleRoles = {
+      ...currentModuleRoles,
+      [moduleId]: updatedRolesForModule
+    };
+
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, moduleRoles: updatedModuleRoles } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+    try {
+      await supabase
+        .from('tenants')
+        .update({ module_roles: updatedModuleRoles, moduleRoles: updatedModuleRoles })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `Atualizou permissão do cargo [${roleName}] no módulo [${moduleId}]`);
+    setFeedbackMsg(`✅ Permissões de cargo atualizadas!`);
+    setTimeout(() => setFeedbackMsg(""), 2500);
+  };
+
+  // GERAR PRÓXIMA FATURA SEM DUPLICIDADE (Calcula com base na última competência gerada)
+  const handleGenerateNextInvoice = async () => {
+    if (!selectedTenant) return;
+    const invoices = selectedTenant.invoices || [];
+
+    let nextYear = 2026;
+    let nextMonthNum = 11;
+
+    if (invoices.length > 0) {
+      // Pega a última fatura para avançar o mês corretamente
+      const lastInv = invoices[invoices.length - 1];
+      const [yStr, mStr] = (lastInv.referenceMonth || "2026-10").split("-");
+      let y = Number(yStr);
+      let m = Number(mStr) + 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
+      nextYear = y;
+      nextMonthNum = m;
+    }
+
+    const nextMonthStr = `${nextYear}-${String(nextMonthNum).padStart(2, "0")}`;
+    const nextDueDate = `${nextMonthStr}-${String(selectedTenant.dueDay || 10).padStart(2, "0")}`;
+
+    // Verifica se já existe fatura para esse mês exato para evitar duplicidade
+    const alreadyExists = invoices.some((inv: TenantInvoice) => inv.referenceMonth === nextMonthStr);
+    if (alreadyExists) {
+      alert(`⚠️ Já existe uma fatura gerada para a competência ${nextMonthStr}.`);
+      return;
+    }
+
+    const newInvoice: TenantInvoice = {
+      id: `inv-${Date.now()}`,
+      referenceMonth: nextMonthStr,
+      amount: selectedTenant.monthlyFee,
+      dueDate: nextDueDate,
+      status: "Aberto"
+    };
+
+    const updatedInvoices = [...invoices, newInvoice];
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+    try {
+      await supabase
+        .from('tenants')
+        .update({ invoices: updatedInvoices })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `Gerou nova fatura para a competência ${nextMonthStr}`);
+    setFeedbackMsg(`✅ Fatura de ${nextMonthStr} gerada com sucesso!`);
+    setTimeout(() => setFeedbackMsg(""), 3000);
+  };
+
+  // EDITAR E EXCLUIR EMPRESA DA CARTEIRA
+  const openEditTenantModal = (t: TenantAccount) => {
+    setEditCompanyName(t.companyName);
+    setEditOwnerName(t.ownerName);
+    setEditOwnerEmail(t.ownerEmail);
+    setEditOwnerPhone(t.ownerPhone);
+    setEditMonthlyFee(t.monthlyFee);
+    setIsEditTenantModalOpen(true);
+  };
+
+  const handleSaveTenantEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenant) return;
+
+    const updatedList = tenants.map(t => {
+      if (t.id === selectedTenant.id) {
+        return {
+          ...t,
+          companyName: editCompanyName,
+          ownerName: editOwnerName,
+          ownerEmail: editOwnerEmail,
+          ownerPhone: editOwnerPhone,
+          monthlyFee: Number(editMonthlyFee)
+        };
+      }
+      return t;
+    });
+
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+    try {
+      await supabase
+        .from('tenants')
+        .update({
+          company_name: editCompanyName,
+          owner_name: editOwnerName,
+          owner_email: editOwnerEmail,
+          owner_phone: editOwnerPhone,
+          monthly_fee: Number(editMonthlyFee)
+        })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(editCompanyName, "Atualizou os dados cadastrais da empresa");
+    setIsEditTenantModalOpen(false);
+    setFeedbackMsg("✅ Dados da empresa atualizados!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
+  };
+
+  const handleDeleteTenant = async () => {
+    if (!selectedTenant) return;
+    const confirmName = prompt(`⚠️ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
+    
+    if (confirmName !== selectedTenant.companyName) {
+      alert("Nome incorreto. A exclusão foi cancelada por segurança.");
+      return;
+    }
+
+    const targetSlug = selectedTenant.slug;
+    const targetName = selectedTenant.companyName;
+
+    try {
+      await supabase.from('tenants').delete().eq('slug', targetSlug);
+    } catch (e) {}
+
+    const remaining = tenants.filter(t => t.id !== selectedTenant.id);
+    setTenants(remaining);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(remaining));
+    if (remaining.length > 0) {
+      setSelectedTenantId(remaining[0].id);
+    } else {
+      setSelectedTenantId("");
+    }
+
+    logAction(targetName, "EXCLUIU permanentemente a empresa do banco de dados");
+    setFeedbackMsg(`🗑 Empresa "${targetName}" excluída com sucesso!`);
+    setTimeout(() => setFeedbackMsg(""), 4000);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -440,38 +617,6 @@ export default function MasterPanel() {
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
     logAction(selectedTenant.companyName, "Removeu o documento de contrato");
-  };
-
-  const handleReceiptUpload = (invoiceId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedTenant) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      const updatedInvoices = selectedTenant.invoices.map((inv: TenantInvoice) => {
-        if (inv.id === invoiceId) {
-          return { ...inv, receiptUrl: base64, receiptName: file.name };
-        }
-        return inv;
-      });
-
-      const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
-      setTenants(updatedList);
-      localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-      try {
-        await supabase
-          .from('tenants')
-          .update({ invoices: updatedInvoices })
-          .eq('slug', selectedTenant.slug);
-      } catch (e) {}
-
-      logAction(selectedTenant.companyName, `Anexou comprovante de pagamento à fatura (${invoiceId})`);
-      setFeedbackMsg("✅ Comprovante anexado à fatura com segurança!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    };
-    reader.readAsDataURL(file);
   };
 
   const openEditInvoiceModal = (inv: TenantInvoice) => {
@@ -861,7 +1006,14 @@ export default function MasterPanel() {
               <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                 {tenants.filter(t => t.companyName.toLowerCase().includes(searchTerm.toLowerCase())).map((t) => (
                   <div key={t.id} onClick={() => setSelectedTenantId(t.id)} className={`p-3.5 rounded-2xl border transition cursor-pointer space-y-2 ${selectedTenant?.id === t.id ? "bg-indigo-600/15 border-indigo-500 text-white" : "bg-slate-950/60 border-slate-800 text-slate-300"}`}>
-                    <div className="flex justify-between"><strong className="text-sm font-bold">{t.companyName}</strong><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.status === 'Bloqueado' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{t.status}</span></div>
+                    <div className="flex justify-between items-center">
+                      <strong className="text-sm font-bold">{t.companyName}</strong>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.status === 'Bloqueado' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{t.status}</span>
+                        <button onClick={(e) => { e.stopPropagation(); openEditTenantModal(t); }} className="p-1 hover:bg-slate-800 text-indigo-400 rounded" title="Editar Empresa"><Pencil size={13} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedTenantId(t.id); handleDeleteTenant(); }} className="p-1 hover:bg-slate-800 text-rose-400 rounded" title="Excluir Empresa"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
                     <div className="flex justify-between text-xs text-slate-400"><span>{t.ownerName}</span><span className="font-black text-indigo-300">R$ {t.monthlyFee.toFixed(2)}</span></div>
                   </div>
                 ))}
@@ -965,6 +1117,9 @@ export default function MasterPanel() {
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                       <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes Pix</h4>
+                      <button onClick={handleGenerateNextInvoice} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5">
+                        <Plus size={14} /> Gerar Próxima Fatura
+                      </button>
                     </div>
 
                     <div className="divide-y divide-slate-800">
@@ -973,17 +1128,17 @@ export default function MasterPanel() {
                           <div className="flex justify-between items-center">
                             <div>
                               <strong className="text-white text-sm">Competência {inv.referenceMonth}</strong>
-                              <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} {inv.paidAt ? `• Pago em ${inv.paidAt} via ${inv.paymentMethod}` : ""}</p>
+                              <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} • Status: <span className={inv.status === 'Pago' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{inv.status}</span> {inv.paidAt ? `(Pago em ${inv.paidAt})` : ""}</p>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="font-black text-white text-sm">R$ {inv.amount.toFixed(2)}</span>
                               {inv.status !== "Pago" && (
                                 <button onClick={() => markInvoicePaid(selectedTenant.id, inv.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                                  Confirmar Pagamento
+                                  Cobrar / Marcar Pago
                                 </button>
                               )}
-                              <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer"><Pencil size={14} /></button>
-                              <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer"><Trash2 size={14} /></button>
+                              <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
+                              <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
                             </div>
                           </div>
                         </div>
@@ -995,17 +1150,43 @@ export default function MasterPanel() {
                 {activeTab === "modulos" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div>
-                      <h4 className="font-bold text-white">Módulos & Permissões por Cargo</h4>
+                      <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
+                      <p className="text-slate-400 text-[11px]">Defina quais cargos podem visualizar ou interagir com cada aba no painel do cliente.</p>
                     </div>
                     <div className="space-y-3">
                       {moduleNames.map(m => {
                         const isEn = selectedTenant.allowedModules?.[m.id] ?? true;
+                        const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor"];
+
                         return (
-                          <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex justify-between items-center">
-                            <span className="font-bold text-white text-sm">{m.label}</span>
-                            <button onClick={() => toggleTenantModule(m.id)} className={`px-3 py-1 rounded-lg font-bold text-[11px] cursor-pointer ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-slate-800 text-slate-500"}`}>
-                              {isEn ? "Módulo Ativo" : "Módulo Bloqueado"}
-                            </button>
+                          <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-white text-sm">{m.label}</span>
+                              <button onClick={() => toggleTenantModule(m.id)} className={`px-3 py-1 rounded-lg font-bold text-[11px] cursor-pointer ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-slate-800 text-slate-500"}`}>
+                                {isEn ? "Módulo Ativo" : "Módulo Bloqueado"}
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-900 text-[11px]">
+                              <span className="text-slate-400 font-semibold mr-1">Cargos com acesso:</span>
+                              {availableRolesList.map(r => {
+                                const hasRoleAccess = allowedRolesForMod.includes(r);
+                                return (
+                                  <button
+                                    key={r}
+                                    type="button"
+                                    onClick={() => toggleModuleRoleAccess(m.id, r)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer border ${
+                                      hasRoleAccess 
+                                        ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300" 
+                                        : "bg-slate-900 border-slate-800 text-slate-600"
+                                    }`}
+                                  >
+                                    {r} {hasRoleAccess ? "✓" : "×"}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         );
                       })}
@@ -1064,6 +1245,84 @@ export default function MasterPanel() {
           </div>
         )}
       </main>
+
+      {/* MODAL EDITAR EMPRESA */}
+      {isEditTenantModalOpen && selectedTenant && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white">Editar Dados da Empresa</h3>
+              <button onClick={() => setIsEditTenantModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveTenantEdit} className="space-y-3">
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Nome da Empresa *</label>
+                <input required value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Responsável *</label>
+                  <input required value={editOwnerName} onChange={e => setEditOwnerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">E-mail Principal *</label>
+                  <input required type="email" value={editOwnerEmail} onChange={e => setEditOwnerEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">WhatsApp *</label>
+                  <input required value={editOwnerPhone} onChange={e => setEditOwnerPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Mensalidade (R$) *</label>
+                  <input required type="number" step="0.01" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Alterações</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR FATURA */}
+      {isEditInvoiceModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white">Editar Fatura</h3>
+              <button onClick={() => setIsEditInvoiceModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveInvoiceEdit} className="space-y-3">
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Competência (AAAA-MM) *</label>
+                <input required placeholder="2026-11" value={invoiceMonth} onChange={e => setInvoiceMonth(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Valor (R$) *</label>
+                  <input required type="number" step="0.01" value={invoiceAmount} onChange={e => setInvoiceAmount(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Vencimento *</label>
+                  <input required type="date" value={invoiceDueDate} onChange={e => setInvoiceDueDate(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Status *</label>
+                <select value={invoiceStatus} onChange={e => setInvoiceStatus(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
+                  <option value="Aberto">Aberto</option>
+                  <option value="Pago">Pago</option>
+                  <option value="Vencido">Vencido</option>
+                </select>
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Fatura</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL ADICIONAR / EDITAR LOGIN */}
       {isNewLoginModalOpen && (
@@ -1147,21 +1406,4 @@ export default function MasterPanel() {
                 </div>
               </div>
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
-                <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
-              </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                <span className="text-[11px] font-bold text-indigo-400 block">Primeiro Acesso do Dono:</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <input required placeholder="Nome de Usuário" value={newInitialUser} onChange={e => setNewInitialUser(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
-                  <input required type="password" placeholder="Senha Forte" value={newInitialPass} onChange={e => setNewInitialPass(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Criar Empresa Segura</button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                <label className="text-slate-300 font-semibold block mb-1">
