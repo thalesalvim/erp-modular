@@ -329,7 +329,7 @@ export default function MasterPanel() {
     if ((cleanUser === "master" || cleanUser === "thaleco7") && cleanPass === "Isabela123!") {
       setIsMasterAuth(true);
       localStorage.setItem("master_session_active", "true");
-      logAction("SaaS Central", "Login Master realizado com sucesso");
+      logAction("HandyHub", "Login Master realizado com sucesso");
     } else {
       setErrorMsg("Credenciais incorretas.");
     }
@@ -1050,7 +1050,7 @@ export default function MasterPanel() {
           <div className="p-2.5 bg-indigo-600/20 border border-indigo-500/40 rounded-xl text-indigo-400"><ShieldCheck size={26} /></div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-white tracking-tight">SaaS Central • Master Control</h1>
+              <h1 className="text-lg font-black text-white tracking-tight">HandyHub • Master Control</h1>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
                 <Lock size={10} /> AMBIENTE SEGURO & LOGS
               </span>
@@ -1112,14 +1112,14 @@ export default function MasterPanel() {
                     
                     <div className="flex items-center gap-2 mt-3">
                       <a
-                        href={`https://wa.me/55${selectedTenant.ownerPhone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(selectedTenant.ownerName)},%20tudo%20bem?`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition"
-                      >
-                        <Phone size={13} />
-                        <span>Chamar no WhatsApp</span>
-                      </a>
+  href={`https://wa.me/${selectedTenant.ownerPhone.replace(/\D/g, '').startsWith('55') || selectedTenant.ownerPhone.replace(/\D/g, '').length > 11 ? selectedTenant.ownerPhone.replace(/\D/g, '') : '55' + selectedTenant.ownerPhone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(selectedTenant.ownerName)},%20tudo%20bem?`}
+  target="_blank"
+  rel="noreferrer"
+  className="bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition"
+>
+  <Phone size={13} />
+  <span>Chamar no WhatsApp</span>
+</a>
                       <a
                         href={`mailto:${selectedTenant.ownerEmail}?subject=Suporte%20ou%20Aviso%20-%20SaaS`}
                         className="bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/30 text-indigo-300 font-bold text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition"
