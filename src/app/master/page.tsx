@@ -138,6 +138,52 @@ const MASTER_PLANS_LIST = [
   { name: "Consultoria Avulsa", price: 120.00, desc: "Sessão única de consultoria" }
 ];
 
+// Mapeamento dos módulos permitidos por padrão para cada plano
+const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
+  "Básico": {
+    dashboard: true,
+    calendar: true,
+    atendimentos: true,
+    services: true,
+    promotions: false,
+    pos: true,
+    stock: true,
+    expenses: false,
+    team: false,
+    customers: true,
+    dre: false,
+    settings: true
+  },
+  "Pro": {
+    dashboard: true,
+    calendar: true,
+    atendimentos: true,
+    services: true,
+    promotions: true,
+    pos: true,
+    stock: true,
+    expenses: true,
+    team: true,
+    customers: true,
+    dre: false,
+    settings: true
+  },
+  "Ultra": {
+    dashboard: true,
+    calendar: true,
+    atendimentos: true,
+    services: true,
+    promotions: true,
+    pos: true,
+    stock: true,
+    expenses: true,
+    team: true,
+    customers: true,
+    dre: true,
+    settings: true
+  }
+};
+
 export default function MasterPanel() {
   const [isMounted, setIsMounted] = useState(false);
   const [isMasterAuth, setIsMasterAuth] = useState(() => {
@@ -170,6 +216,7 @@ export default function MasterPanel() {
   const [editOwnerEmail, setEditOwnerEmail] = useState("");
   const [editOwnerPhone, setEditOwnerPhone] = useState("");
   const [editMonthlyFee, setEditMonthlyFee] = useState(149.90);
+  const [editPlanName, setEditPlanName] = useState("Pro");
 
   const [newCompany, setNewCompany] = useState("");
   const [newDocument, setNewDocument] = useState("");
@@ -248,7 +295,7 @@ export default function MasterPanel() {
             dueDay: 10,
             status: "Ativo",
             autoBlockGraceDays: 5,
-            allowedModules: { dre: true },
+            allowedModules: PLAN_DEFAULT_MODULES["Pro"],
             moduleRoles: {},
             invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
             logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
@@ -318,6 +365,12 @@ export default function MasterPanel() {
   const selectedTenant = useMemo(() => {
     return tenants.find((t) => t.id === selectedTenantId) || tenants[0] || null;
   }, [tenants, selectedTenantId]);
+
+  // Faturas ordenadas de forma crescente (antigas embaixo / recentes em cima ou vice-versa, ajustado para as antigas irem descendo)
+  const sortedInvoices = useMemo(() => {
+    if (!selectedTenant || !selectedTenant.invoices) return [];
+    return [...selectedTenant.invoices].sort((a, b) => a.referenceMonth.localeCompare(b.referenceMonth));
+  }, [selectedTenant]);
 
   const filteredSystemLogs = useMemo(() => {
     return systemLogs.filter((log: SystemLog) => {
@@ -424,7 +477,7 @@ export default function MasterPanel() {
   const toggleModuleRoleAccess = async (moduleId: string, roleName: string) => {
     if (!selectedTenant) return;
     const currentModuleRoles = selectedTenant.moduleRoles || {};
-    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor"];
+    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
     
     let updatedRolesForModule = [];
     if (rolesForModule.includes(roleName)) {
@@ -454,6 +507,7 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 2500);
   };
 
+  // GERAR PRÓXIMA FATURA SEM DUPLICIDADE (Avança exatamente 1 mês da última gerada)
   const handleGenerateNextInvoice = async () => {
     if (!selectedTenant) return;
     const invoices = selectedTenant.invoices || [];
@@ -462,7 +516,9 @@ export default function MasterPanel() {
     let nextMonthNum = 11;
 
     if (invoices.length > 0) {
-      const lastInv = invoices[invoices.length - 1];
+      // Ordena para pegar cronologicamente a última fatura gerada
+      const sorted = [...invoices].sort((a, b) => a.referenceMonth.localeCompare(b.referenceMonth));
+      const lastInv = sorted[sorted.length - 1];
       const [yStr, mStr] = (lastInv.referenceMonth || "2026-10").split("-");
       let y = Number(yStr);
       let m = Number(mStr) + 1;
@@ -514,12 +570,18 @@ export default function MasterPanel() {
     setEditOwnerEmail(t.ownerEmail);
     setEditOwnerPhone(t.ownerPhone);
     setEditMonthlyFee(t.monthlyFee);
+    setEditPlanName(t.planName);
     setIsEditTenantModalOpen(true);
   };
 
+  // ATUALIZAR DADOS DA EMPRESA + RESTRINGIR OU ABRIR MÓDULOS DE ACORDO COM O PLANO (UPGRADE / DOWNGRADE)
   const handleSaveTenantEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTenant) return;
+
+    // Aplica os módulos padrão do plano selecionado (Básico, Pro, Ultra)
+    const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
+    const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
 
     const updatedList = tenants.map(t => {
       if (t.id === selectedTenant.id) {
@@ -529,7 +591,9 @@ export default function MasterPanel() {
           ownerName: editOwnerName,
           ownerEmail: editOwnerEmail,
           ownerPhone: editOwnerPhone,
-          monthlyFee: Number(editMonthlyFee)
+          monthlyFee: Number(editMonthlyFee || newFeeVal),
+          planName: editPlanName,
+          allowedModules: newAllowedMods
         };
       }
       return t;
@@ -546,20 +610,23 @@ export default function MasterPanel() {
           owner_name: editOwnerName,
           owner_email: editOwnerEmail,
           owner_phone: editOwnerPhone,
-          monthly_fee: Number(editMonthlyFee)
+          monthly_fee: Number(editMonthlyFee || newFeeVal),
+          plan_name: editPlanName,
+          allowed_modules: newAllowedMods,
+          allowedModules: newAllowedMods
         })
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(editCompanyName, "Atualizou os dados cadastrais da empresa");
+    logAction(editCompanyName, `Atualizou plano para ${editPlanName} e aplicou restrições de módulos`);
     setIsEditTenantModalOpen(false);
-    setFeedbackMsg("✅ Dados da empresa atualizados!");
+    setFeedbackMsg(`✅ Empresa atualizada para o plano ${editPlanName}!`);
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
-    const confirmName = prompt(`⚠️ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
+    const confirmName = prompt(`⚠️️ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
     
     if (confirmName !== selectedTenant.companyName) {
       alert("Nome incorreto. A exclusão foi cancelada por segurança.");
@@ -830,6 +897,8 @@ export default function MasterPanel() {
       return;
     }
 
+    const defaultModsForNew = PLAN_DEFAULT_MODULES[newPlan] || PLAN_DEFAULT_MODULES["Pro"];
+
     const newTenantData = {
       slug,
       company_name: newCompany,
@@ -841,8 +910,8 @@ export default function MasterPanel() {
       monthly_fee: Number(newFee) || 149.90,
       due_day: Number(newDueDay) || 10,
       status: "Ativo" as const,
-      allowed_modules: { dre: true, dashboard: true, calendar: true },
-      allowedModules: { dre: true, dashboard: true, calendar: true },
+      allowed_modules: defaultModsForNew,
+      allowedModules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
       logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
       internalNotes: "Novo contrato cadastrado com ambiente seguro.",
@@ -873,7 +942,7 @@ export default function MasterPanel() {
       dueDay: Number(newDueDay) || 10,
       status: "Ativo",
       autoBlockGraceDays: 5,
-      allowedModules: { dre: true, dashboard: true, calendar: true },
+      allowedModules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
       logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
       contractDocument: null,
@@ -1110,14 +1179,14 @@ export default function MasterPanel() {
                 {activeTab === "faturas" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes Pix</h4>
+                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes Pix (Ordem Crescente)</h4>
                       <button onClick={handleGenerateNextInvoice} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5">
                         <Plus size={14} /> Gerar Próxima Fatura
                       </button>
                     </div>
 
                     <div className="divide-y divide-slate-800">
-                      {selectedTenant.invoices?.map((inv: TenantInvoice) => (
+                      {sortedInvoices.map((inv: TenantInvoice) => (
                         <div key={inv.id} className="py-4 space-y-2">
                           <div className="flex justify-between items-center">
                             <div>
@@ -1128,7 +1197,7 @@ export default function MasterPanel() {
                               <span className="font-black text-white text-sm">R$ {inv.amount.toFixed(2)}</span>
                               {inv.status !== "Pago" && (
                                 <button onClick={() => markInvoicePaid(selectedTenant.id, inv.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                                  Cobrar / Marcar Pago
+                                  Marcar Pago
                                 </button>
                               )}
                               <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
@@ -1145,12 +1214,12 @@ export default function MasterPanel() {
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div>
                       <h4 className="font-bold text-white mb-1">Módulos & Controle de Acesso por Cargo</h4>
-                      <p className="text-slate-400 text-[11px]">Defina quais cargos podem visualizar ou interagir com cada aba no painel do cliente.</p>
+                      <p className="text-slate-400 text-[11px]">Gerencie permissões granulares para Dono, Gestor e Colaborador.</p>
                     </div>
                     <div className="space-y-3">
                       {moduleNames.map(m => {
                         const isEn = selectedTenant.allowedModules?.[m.id] ?? true;
-                        const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor"];
+                        const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor", "Colaborador"];
 
                         return (
                           <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
@@ -1240,12 +1309,12 @@ export default function MasterPanel() {
         )}
       </main>
 
-      {/* MODAL EDITAR EMPRESA */}
+      {/* MODAL EDITAR EMPRESA & PLANO */}
       {isEditTenantModalOpen && selectedTenant && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">Editar Dados da Empresa</h3>
+              <h3 className="text-base font-bold text-white">Editar Empresa & Mudar Plano (Upgrade/Downgrade)</h3>
               <button onClick={() => setIsEditTenantModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
 
@@ -1270,9 +1339,26 @@ export default function MasterPanel() {
                   <input required value={editOwnerPhone} onChange={e => setEditOwnerPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Mensalidade (R$) *</label>
-                  <input required type="number" step="0.01" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
+                  <label className="text-slate-300 font-semibold block mb-1">Plano Contratado *</label>
+                  <select value={editPlanName} onChange={e => {
+                    const sel = e.target.value;
+                    setEditPlanName(sel);
+                    if (sel === "Básico") setEditMonthlyFee(89.90);
+                    else if (sel === "Pro") setEditMonthlyFee(149.90);
+                    else if (sel === "Ultra") setEditMonthlyFee(299.90);
+                  }} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-indigo-300 font-bold outline-none">
+                    <option value="Básico">Básico</option>
+                    <option value="Pro">Pro</option>
+                    <option value="Ultra">Ultra</option>
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Mensalidade (R$) *</label>
+                <input required type="number" step="0.01" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
+              </div>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px]">
+                ⚠️ Alterar o plano ajustará automaticamente os módulos permitidos (restringindo em caso de downgrade ou abrindo em caso de upgrade).
               </div>
               <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Alterações</button>
             </form>
