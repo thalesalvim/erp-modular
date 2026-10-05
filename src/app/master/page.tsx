@@ -729,7 +729,7 @@ export default function MasterPanel() {
           <form onSubmit={handleLogin} className="space-y-4 text-xs">
             <div>
               <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">E-mail ou Usuário Master</label>
-              <input type="text" required value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="thalesalvim997@gmail.com" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500" />
+              <input type="text" required value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="masterlogin" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500" />
             </div>
             <div>
               <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">Senha Criptografada</label>
