@@ -54,7 +54,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getTenantFromCloud, getTenantDataCloud, saveTenantDataCloud } from '@/lib/dbService';
+import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
 
 function hashPassword(pass: string): string {
   try {
@@ -311,7 +311,7 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
-  // FUNÇÃO OTIMIZADA COM CARREGAMENTO PARALELO (INSTANTÂNEO)
+  // CARREGAMENTO ULTRA-RÁPIDO UNIFICADO (1 ÚNICA REQUISIÇÃO HTTP)
   const loadTenantData = async (slug: string) => {
     const cachedData = localStorage.getItem(`saas_cache_${slug}`);
     if (cachedData) {
@@ -332,53 +332,48 @@ export default function Home() {
     }
 
     try {
-      const [emp, cust, srv, roles, promo, prod, moves, sls, exp, appts, atts] = await Promise.all([
-        getTenantDataCloud(slug, 'employees'),
-        getTenantDataCloud(slug, 'customers'),
-        getTenantDataCloud(slug, 'services'),
-        getTenantDataCloud(slug, 'rolesList'),
-        getTenantDataCloud(slug, 'promotions'),
-        getTenantDataCloud(slug, 'products'),
-        getTenantDataCloud(slug, 'stockMoves'),
-        getTenantDataCloud(slug, 'sales'),
-        getTenantDataCloud(slug, 'expenses'),
-        getTenantDataCloud(slug, 'appointments'),
-        getTenantDataCloud(slug, 'attendances')
-      ]);
+      const cloudData = await getAllTenantDataCloud(slug);
+      if (cloudData) {
+        if (cloudData.employees) setEmployees(cloudData.employees);
+        if (cloudData.customers) setCustomers(cloudData.customers);
+        if (cloudData.services) setServices(cloudData.services);
+        if (cloudData.rolesList) setRolesList(cloudData.rolesList);
+        if (cloudData.promotions) setPromotions(cloudData.promotions);
+        if (cloudData.products) setProducts(cloudData.products);
+        if (cloudData.stockMoves) setStockMoves(cloudData.stockMoves);
+        if (cloudData.sales) setSales(cloudData.sales);
+        if (cloudData.expenses) setExpenses(cloudData.expenses);
+        if (cloudData.appointments) setAppointments(cloudData.appointments);
+        if (cloudData.attendances) setAttendances(cloudData.attendances);
 
-      if (emp) setEmployees(emp);
-      if (cust) setCustomers(cust);
-      if (srv) setServices(srv);
-      if (roles) setRolesList(roles);
-      if (promo) setPromotions(promo);
-      if (prod) setProducts(prod);
-      if (moves) setStockMoves(moves);
-      if (sls) setSales(sls);
-      if (exp) setExpenses(exp);
-      if (appts) setAppointments(appts);
-      if (atts) setAttendances(atts);
-
-      localStorage.setItem(`saas_cache_${slug}`, JSON.stringify({
-        employees: emp || employees,
-        customers: cust || customers,
-        services: srv || services,
-        rolesList: roles || rolesList,
-        promotions: promo || promotions,
-        products: prod || products,
-        stockMoves: moves || stockMoves,
-        sales: sls || sales,
-        expenses: exp || expenses,
-        appointments: appts || appointments,
-        attendances: atts || attendances
-      }));
+        localStorage.setItem(`saas_cache_${slug}`, JSON.stringify(cloudData));
+      }
     } catch (e) {
-      console.error("Erro ao sincronizar dados da nuvem:", e);
+      console.error("Erro ao sincronizar dados unificados da nuvem:", e);
     }
   };
 
+  // SALVAMENTO GLOBAL UNIFICADO
   const saveTenantData = async (key: string, data: any) => {
     if (!currentCompany) return;
-    await saveTenantDataCloud(currentCompany.slug, key, data);
+    
+    const currentPayload = {
+      employees,
+      customers,
+      services,
+      rolesList,
+      promotions,
+      products,
+      stockMoves,
+      sales,
+      expenses,
+      appointments,
+      attendances,
+      [key]: data
+    };
+
+    await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
+    localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
   };
 
   const updateCompanyInMasterDb = async (updatedFields: any) => {
