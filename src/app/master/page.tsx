@@ -140,7 +140,14 @@ const MASTER_PLANS_LIST = [
 
 export default function MasterPanel() {
   const [isMounted, setIsMounted] = useState(false);
-  const [isMasterAuth, setIsMasterAuth] = useState(false);
+
+  // Mantém a sessão do master ativa após o F5
+  const [isMasterAuth, setIsMasterAuth] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("master_session_active") === "true";
+    }
+    return false;
+  });
 
   const [userInput, setUserInput] = useState("");
   const [passInput, setPassInput] = useState("");
@@ -208,7 +215,7 @@ export default function MasterPanel() {
             dueDay: Number(t.due_day || t.dueDay || 10),
             status: t.status || "Ativo",
             autoBlockGraceDays: 5,
-            allowedModules: t.allowedModules || t.allowed_modules || { dre: true },
+            allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
             invoices: t.invoices || [],
             logins: t.logins || [],
             contractDocument: t.contractDocument || null,
@@ -293,6 +300,7 @@ export default function MasterPanel() {
 
     if ((cleanUser === "master" || cleanUser === "thaleco7") && cleanPass === "Isabela123!") {
       setIsMasterAuth(true);
+      localStorage.setItem("master_session_active", "true");
       logAction("SaaS Central", "Login Master realizado com sucesso");
     } else {
       setErrorMsg("Credenciais incorretas.");
@@ -301,6 +309,7 @@ export default function MasterPanel() {
 
   const handleLogout = () => {
     setIsMasterAuth(false);
+    localStorage.removeItem("master_session_active");
     localStorage.removeItem("saas_active_tenant");
     window.location.href = "/";
   };
@@ -356,7 +365,6 @@ export default function MasterPanel() {
     if (!target) return;
     const nextStatus = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
 
-    // Atualiza diretamente na tabela 'tenants' filtrando por slug ou id
     const { error } = await supabase
       .from('tenants')
       .update({ status: nextStatus })
@@ -368,13 +376,12 @@ export default function MasterPanel() {
       setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
       setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      // Tenta atualizar por id se falhar o slug
-      const { error: errId } = await supabase
+      const { error: err2 } = await supabase
         .from('tenants')
         .update({ status: nextStatus })
         .eq('id', target.id);
 
-      if (!errId) {
+      if (!err2) {
         setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t));
         logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
         setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
@@ -393,10 +400,12 @@ export default function MasterPanel() {
       [moduleId]: !(currentAllowed[moduleId] ?? true)
     };
 
-    // Atualiza usando formato compatível no Supabase
     const { error } = await supabase
       .from('tenants')
-      .update({ allowedModules: updatedModules })
+      .update({
+        allowed_modules: updatedModules,
+        allowedModules: updatedModules
+      })
       .eq('slug', selectedTenant.slug);
 
     if (!error) {
@@ -405,12 +414,15 @@ export default function MasterPanel() {
       setFeedbackMsg("✅ Módulo atualizado com sucesso!");
       setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      const { error: err2 } = await supabase
+      const { error: errId } = await supabase
         .from('tenants')
-        .update({ allowed_modules: updatedModules })
-        .eq('slug', selectedTenant.slug);
+        .update({
+          allowed_modules: updatedModules,
+          allowedModules: updatedModules
+        })
+        .eq('id', selectedTenant.id);
 
-      if (!err2) {
+      if (!errId) {
         setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
         logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
         setFeedbackMsg("✅ Módulo atualizado com sucesso!");
@@ -685,6 +697,7 @@ export default function MasterPanel() {
       due_day: Number(newDueDay) || 10,
       status: "Ativo",
       allowed_modules: { dre: true, dashboard: true, calendar: true },
+      allowedModules: { dre: true, dashboard: true, calendar: true },
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
       logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
       internalNotes: "Novo contrato cadastrado com ambiente seguro.",
@@ -711,7 +724,7 @@ export default function MasterPanel() {
         dueDay: created.due_day,
         status: created.status,
         autoBlockGraceDays: 5,
-        allowedModules: created.allowed_modules || { dre: true },
+        allowedModules: created.allowed_modules || created.allowedModules || { dre: true },
         invoices: created.invoices || [],
         logins: created.logins || [],
         contractDocument: null,
