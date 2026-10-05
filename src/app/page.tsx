@@ -592,20 +592,23 @@ export default function Home() {
     const rootDre = currentCompany.dre === true || currentCompany.allow_dre === true;
     const trialAllowed = allowedMods.dre === true || allowedMods.DRE === true;
 
-    const expiresAt = currentCompany.dre_trial_expires_at || currentCompany.dreTrialExpiresAt;
-    const notExpired = expiresAt ? new Date().getTime() < new Date(expiresAt).getTime() : true;
-
-    return isUltra || ((trialAllowed || rootDre) && notExpired);
+    return isUltra || trialAllowed || rootDre;
   }, [currentCompany]);
 
+  // VALIDAÇÃO RIGOROSA DA NUVEM (Bloqueia se o Master desativou no painel)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
-    if (tabId === "settings" || tabId === "calendar" || tabId === "atendimentos" || tabId === "customers" || tabId === "pos" || tabId === "stock" || tabId === "services") {
+    if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
       return true;
     }
 
-    const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    
+    if (allowedMods[tabId] === false) {
+      return false;
+    }
+
+    const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
 
     if (tabId === "dre") {
       return hasDREAccess;
@@ -1001,7 +1004,7 @@ export default function Home() {
               </div>
               <h3 className="text-lg font-black text-white">Módulo Bloqueado no Plano Atual</h3>
               <p className="text-xs text-slate-400">
-                O seu plano atual não inclui o acesso a este módulo ou o período de teste expirou. Faça um upgrade para o Plano Pro ou Ultra para desbloquear este recurso instantaneamente!
+                O seu plano atual não inclui o acesso a este módulo ou ele foi desativado pela administração. Faça um upgrade para o Plano Pro ou Ultra para desbloquear este recurso instantaneamente!
               </p>
               <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
                 ✨ Fazer Upgrade de Plano
@@ -1562,8 +1565,8 @@ export default function Home() {
                       <div className="inline-flex p-4 bg-indigo-600/20 text-indigo-400 rounded-3xl border border-indigo-500/30">
                         <Lock size={40} />
                       </div>
-                      <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra ou Trial</h3>
-                      <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Ative o Trial no Master ou faça upgrade para o Plano Ultra!</p>
+                      <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra</h3>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Faça upgrade para o Plano Ultra!</p>
                       <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
                         ✨ Conhecer o Plano Ultra
                       </button>
