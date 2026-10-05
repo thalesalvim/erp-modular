@@ -39,7 +39,9 @@ import {
   Activity,
   Award,
   Sparkle,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -248,6 +250,8 @@ export default function MasterPanel() {
   const [invoicePaymentMethod, setInvoicePaymentMethod] = useState("Pix");
   const [invoiceCardInput, setInvoiceCardInput] = useState("");
 
+  const [collapsedInvoices, setCollapsedInvoices] = useState<{ [id: string]: boolean }>({});
+
   const [tempAllowedModules, setTempAllowedModules] = useState<any>({});
   const [tempModuleRoles, setTempModuleRoles] = useState<any>({});
 
@@ -350,7 +354,6 @@ export default function MasterPanel() {
     }
   }, [selectedTenantId, selectedTenant]);
 
-  // Faturas ordenadas decrescente (mais novas em cima)
   const sortedInvoices = useMemo(() => {
     if (!selectedTenant || !selectedTenant.invoices) return [];
     return [...selectedTenant.invoices].sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
@@ -458,23 +461,24 @@ export default function MasterPanel() {
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
+      // Enviando exclusivamente chaves limpas permitidas na tabela do Supabase
       const { error } = await supabase
         .from('tenants')
         .update({
           allowed_modules: tempAllowedModules,
-          allowedModules: tempAllowedModules,
-          module_roles: tempModuleRoles,
-          moduleRoles: tempModuleRoles
+          module_roles: tempModuleRoles
         })
         .eq('slug', selectedTenant.slug);
 
       if (error) {
         console.error("Erro ao salvar no Supabase:", error);
-        alert("Erro ao salvar na nuvem. Verifique a conexão.");
+        alert(`Erro ao salvar na nuvem: ${error.message}`);
         return;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert(`Erro de conexão com a nuvem: ${e?.message || e}`);
+      return;
     }
 
     logAction(selectedTenant.companyName, "Salvou manualmente as permissões de módulos e cargos");
@@ -511,7 +515,6 @@ export default function MasterPanel() {
         .from('tenants')
         .update({
           allowed_modules: updatedModules,
-          allowedModules: updatedModules,
           dre_trial_expires_at: expirationDate,
           ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
@@ -662,8 +665,7 @@ export default function MasterPanel() {
           owner_phone: editOwnerPhone,
           monthly_fee: Number(editMonthlyFee || newFeeVal),
           plan_name: editPlanName,
-          allowed_modules: newAllowedMods,
-          allowedModules: newAllowedMods
+          allowed_modules: newAllowedMods
         })
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
@@ -973,7 +975,6 @@ export default function MasterPanel() {
       due_day: Number(newDueDay) || 10,
       status: "Ativo" as const,
       allowed_modules: defaultModsForNew,
-      allowedModules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
       logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
       internalNotes: "Novo contrato cadastrado com ambiente seguro.",
@@ -1248,43 +1249,57 @@ export default function MasterPanel() {
                     </div>
 
                     <div className="divide-y divide-slate-800">
-                      {sortedInvoices.map((inv: TenantInvoice) => (
-                        <div key={inv.id} className="py-4 space-y-3">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <strong className="text-white text-sm">Competência {inv.referenceMonth}</strong>
-                              <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} • Forma: <strong className="text-indigo-300">{inv.paymentMethod || "Pix"}</strong> {inv.cardLast4 ? `(${inv.cardLast4})` : ""} • Status: <span className={inv.status === 'Pago' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{inv.status}</span> {inv.paidAt ? `(Pago em ${inv.paidAt})` : ""}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="font-black text-white text-sm">R$ {inv.amount.toFixed(2)}</span>
-                              {inv.status !== "Pago" && (
-                                <button onClick={() => markInvoicePaid(selectedTenant.id, inv.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                                  Marcar Pago
+                      {sortedInvoices.map((inv: TenantInvoice) => {
+                        const isCollapsed = collapsedInvoices[inv.id] ?? false;
+                        return (
+                          <div key={inv.id} className="py-4 space-y-3">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <strong className="text-white text-sm">Competência {inv.referenceMonth}</strong>
+                                <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} • Forma: <strong className="text-indigo-300">{inv.paymentMethod || "Pix"}</strong> {inv.cardLast4 ? `(${inv.cardLast4})` : ""} • Status: <span className={inv.status === 'Pago' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{inv.status}</span> {inv.paidAt ? `(Pago em ${inv.paidAt})` : ""}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="font-black text-white text-sm">R$ {inv.amount.toFixed(2)}</span>
+                                {inv.status !== "Pago" && (
+                                  <button onClick={() => markInvoicePaid(selectedTenant.id, inv.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                                    Marcar Pago
+                                  </button>
+                                )}
+                                <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
+                                <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
+                                
+                                <button 
+                                  onClick={() => setCollapsedInvoices(prev => ({ ...prev, [inv.id]: !isCollapsed }))} 
+                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1"
+                                  title={isCollapsed ? "Expandir Fatura" : "Fechar Fatura"}
+                                >
+                                  {isCollapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                                  <span className="text-[10px]">{isCollapsed ? "Expandir" : "Fechar"}</span>
                                 </button>
-                              )}
-                              <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
-                              <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                            <span className="text-slate-400">Comprovante de Pagamento:</span>
-                            <div className="flex items-center gap-2">
-                              {inv.receiptUrl ? (
-                                <a href={inv.receiptUrl} target="_blank" rel="noreferrer" className="text-emerald-400 font-bold hover:underline flex items-center gap-1">
-                                  📄 {inv.receiptName || "Ver Comprovante"}
-                                </a>
-                              ) : (
-                                <span className="text-slate-500 italic">Nenhum arquivo anexado</span>
-                              )}
-                              <input type="file" ref={receiptInputRef} onChange={(e) => handleReceiptUpload(e, inv.id)} className="hidden" id={`receipt-${inv.id}`} accept="image/*,application/pdf" />
-                              <label htmlFor={`receipt-${inv.id}`} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded-lg cursor-pointer font-bold">
-                                {inv.receiptUrl ? "Substituir" : "Anexar Comprovante"}
-                              </label>
-                            </div>
+                            {!isCollapsed && (
+                              <div className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 animate-fadeIn">
+                                <span className="text-slate-400">Comprovante de Pagamento:</span>
+                                <div className="flex items-center gap-2">
+                                  {inv.receiptUrl ? (
+                                    <a href={inv.receiptUrl} target="_blank" rel="noreferrer" className="text-emerald-400 font-bold hover:underline flex items-center gap-1">
+                                      📄 {inv.receiptName || "Ver Comprovante"}
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-500 italic">Nenhum arquivo anexado</span>
+                                  )}
+                                  <input type="file" onChange={(e) => handleReceiptUpload(e, inv.id)} className="hidden" id={`receipt-${inv.id}`} accept="image/*,application/pdf" />
+                                  <label htmlFor={`receipt-${inv.id}`} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded-lg cursor-pointer font-bold">
+                                    {inv.receiptUrl ? "Substituir" : "Anexar Comprovante"}
+                                  </label>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1458,7 +1473,7 @@ export default function MasterPanel() {
         </div>
       )}
 
-      {/* MODAL EDITAR FATURA COM FORMA DE PAGAMENTO E CARTÃO SEGURO */}
+      {/* MODAL EDITAR FATURA */}
       {isEditInvoiceModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
