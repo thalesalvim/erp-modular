@@ -211,7 +211,7 @@ export default function Home() {
     } catch (e) {}
   };
 
-  // CHETAGEM SOBERANA INICIAL NA NUVEM
+  // CHECAGEM DE SOBERANIA NA INICIALIZAÇÃO
   useEffect(() => {
     setIsMounted(true);
     const initializeApp = async () => {
@@ -247,7 +247,7 @@ export default function Home() {
         setCurrentCompany(found);
         setSalonConfig(prev => ({ ...prev, name: found.company_name || found.companyName || "Studio Hair & Beauty" }));
         
-        // DECRETO ABSOLUTO: Se o status na nuvem for Bloqueado, corta o acesso na hora
+        // ORDEM DO REI: Se estiver bloqueado na nuvem, tranca na largada
         if (found.status === "Bloqueado") {
           setIsTenantBlocked(true);
           setIsLogged(false);
@@ -284,20 +284,22 @@ export default function Home() {
     initializeApp();
   }, []);
 
-  // MONITORAMENTO SOBERANO (A cada 1 segundo): O Rei manda, o servidor obedece instantaneamente
+  // MONITORAMENTO CONTÍNUO (A cada 1 segundo): O Rei comanda, o cliente obedece imediatamente
   useEffect(() => {
-    if (!currentCompany?.slug) return;
+    if (!currentCompany?.slug && !localStorage.getItem("saas_active_tenant")) return;
+    const currentSlug = currentCompany?.slug || localStorage.getItem("saas_active_tenant") || "studio-hair";
+
     const interval = setInterval(async () => {
       try {
         const { data: savedTenants, error } = await supabase.from('tenants').select('*');
         if (!error && savedTenants && Array.isArray(savedTenants)) {
-          const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
+          const freshFound = savedTenants.find((t: any) => t.slug === currentSlug);
           if (freshFound) {
             setCurrentCompany(freshFound);
+            // Sincroniza o status de bloqueio em tempo real absoluta
             if (freshFound.status === "Bloqueado") {
               setIsTenantBlocked(true);
               setIsLogged(false);
-              localStorage.removeItem("saas_active_session");
             } else {
               setIsTenantBlocked(false);
             }
@@ -305,6 +307,7 @@ export default function Home() {
         }
       } catch (e) {}
     }, 1000);
+
     return () => clearInterval(interval);
   }, [currentCompany?.slug]);
 
@@ -560,7 +563,7 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // Soberania do Módulo DRE: Se o Master concedeu o Trial (`allowedModules.dre === true`) ou for Plano Ultra
+  // Soberania do Módulo DRE: Verifica o Plano Ultra ou a concessão via Trial pelo Master (`allowedModules.dre`)
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -810,7 +813,7 @@ export default function Home() {
 
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
-  // SOBERANIA ABSOLUTA: Se o status na nuvem for Bloqueado, tranca tudo imediatamente
+  // SOBERANIA ABSOLUTA: Bloqueio imediato na tela do cliente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
