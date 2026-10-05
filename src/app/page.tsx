@@ -311,7 +311,6 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
-  // CARREGAMENTO ULTRA-RÁPIDO UNIFICADO (1 ÚNICA REQUISIÇÃO HTTP)
   const loadTenantData = async (slug: string) => {
     const cachedData = localStorage.getItem(`saas_cache_${slug}`);
     if (cachedData) {
@@ -353,7 +352,6 @@ export default function Home() {
     }
   };
 
-  // SALVAMENTO GLOBAL UNIFICADO
   const saveTenantData = async (key: string, data: any) => {
     if (!currentCompany) return;
     
@@ -397,7 +395,6 @@ export default function Home() {
 
     try {
       const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      
       const tenantsList = (!error && savedTenants && savedTenants.length > 0) ? savedTenants : [currentCompany];
 
       let authCompany = null;
@@ -751,9 +748,12 @@ export default function Home() {
 
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
 
+  // SVG String do Logotipo "H" do HandyHub para Favicon e Marca d'Água
+  const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
+
   if (isTenantBlocked) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+      <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
         <div className="w-full max-w-lg bg-slate-900 border border-rose-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-5">
           <div className="inline-flex p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 mb-2"><AlertOctagon size={48} /></div>
           <h1 className="text-2xl font-black text-white">Acesso Temporariamente Suspenso</h1>
@@ -762,13 +762,18 @@ export default function Home() {
             <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar</span></button>
           </div>
         </div>
+        {/* Marca d'água no canto inferior direito */}
+        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
+          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
+        </div>
       </div>
     );
   }
 
   if (!isLogged) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+      <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
             <div className="inline-flex p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 mb-1">
@@ -800,6 +805,11 @@ export default function Home() {
           <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 font-medium">Ambiente Seguro Corporativo</span>
           </div>
+        </div>
+        {/* Marca d'água no canto inferior direito */}
+        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
+          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
         </div>
       </div>
     );
@@ -836,8 +846,11 @@ export default function Home() {
   });
 
   return (
-    <div className={`flex h-screen font-sans ${bgClass}`}>
-      <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl">
+    <div className={`flex h-screen font-sans ${bgClass} relative`}>
+      {/* Injeção do Favicon no Head */}
+      <link rel="icon" href={handySvgDataUri} />
+
+      <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-10">
         <div>
           {isMasterBypassActive && (
             <div className="mb-4 p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl space-y-1.5 text-center">
@@ -896,7 +909,7 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className={`h-16 border-b px-8 flex items-center justify-between shadow-sm ${headerBgClass}`}>
           <div className="flex items-center gap-2 text-sm opacity-80">
             <span className="font-semibold">{salonConfig.name}</span>
@@ -938,7 +951,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-8 pb-12">
           {activeTab === "dashboard" && isManager && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className={`p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${cardBgClass}`}>
@@ -1823,8 +1836,15 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* Marca d'água corporativa HandyHub fixa no canto inferior direito de TODAS as páginas */}
+        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
+          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded shadow" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
+        </div>
       </main>
 
+      {/* Modais do Sistema */}
       {isWidgetCustomizerOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
