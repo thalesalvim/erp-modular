@@ -583,21 +583,11 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
+  // DRE EXCLUSIVO DO PLANO ULTRA
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
-    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    
-    // Se o Master desativou explicitamente no Master Control, bloqueia imediatamente
-    if (allowedMods["dre"] === false) {
-      return false;
-    }
-
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
-    const isUltra = pName.includes("ultra");
-    const rootDre = currentCompany.dre === true || currentCompany.allow_dre === true;
-    const trialAllowed = allowedMods.dre === true || allowedMods.DRE === true;
-
-    return isUltra || trialAllowed || rootDre;
+    return pName.includes("ultra");
   }, [currentCompany]);
 
   // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
@@ -611,7 +601,6 @@ export default function Home() {
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isBasic = pName.includes("básico") || pName.includes("basico");
 
-    // Se o Master desativou explicitamente na nuvem, bloqueia imediatamente
     if (allowedMods[tabId] === false) {
       return false;
     }
