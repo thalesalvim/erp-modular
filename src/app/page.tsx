@@ -585,17 +585,22 @@ export default function Home() {
 
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
+    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    
+    // Se o Master desativou explicitamente no Master Control, bloqueia imediatamente
+    if (allowedMods["dre"] === false) {
+      return false;
+    }
+
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isUltra = pName.includes("ultra");
-    
-    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
     const rootDre = currentCompany.dre === true || currentCompany.allow_dre === true;
     const trialAllowed = allowedMods.dre === true || allowedMods.DRE === true;
 
     return isUltra || trialAllowed || rootDre;
   }, [currentCompany]);
 
-  // VALIDAÇÃO RIGOROSA DA NUVEM (Bloqueia se o Master desativou no painel)
+  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -603,19 +608,20 @@ export default function Home() {
     }
 
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    
+    const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
+    const isBasic = pName.includes("básico") || pName.includes("basico");
+
+    // Se o Master desativou explicitamente na nuvem, bloqueia imediatamente
     if (allowedMods[tabId] === false) {
       return false;
     }
-
-    const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
 
     if (tabId === "dre") {
       return hasDREAccess;
     }
 
     if (tabId === "expenses" || tabId === "team" || tabId === "promotions") {
-      if (pName.includes("básico") || pName.includes("basico")) {
+      if (isBasic) {
         return allowedMods[tabId] === true;
       }
       return true;
@@ -623,6 +629,7 @@ export default function Home() {
 
     return allowedMods[tabId] ?? true;
   };
+
   const filteredSales = useMemo(() => {
     if (isManager) return sales;
     return sales.filter(s => s.sellerName?.toLowerCase() === activeUserName.toLowerCase() || s.sellerName === activeUserName);
