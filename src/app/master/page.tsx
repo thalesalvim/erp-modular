@@ -208,6 +208,7 @@ export default function MasterPanel() {
 
   const [trialDaysInput, setTrialDaysInput] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditTenantModalOpen, setIsEditTenantModalOpen] = useState(false);
   const [editCompanyName, setEditCompanyName] = useState("");
@@ -244,8 +245,9 @@ export default function MasterPanel() {
   const [invoiceAmount, setInvoiceAmount] = useState(0);
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceStatus, setInvoiceStatus] = useState<"Aberto" | "Pago" | "Vencido">("Aberto");
+  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState("Pix");
+  const [invoiceCardInput, setInvoiceCardInput] = useState("");
 
-  // Estados locais para gerenciar as alterações de módulos e cargos antes de salvar
   const [tempAllowedModules, setTempAllowedModules] = useState<any>({});
   const [tempModuleRoles, setTempModuleRoles] = useState<any>({});
 
@@ -284,34 +286,6 @@ export default function MasterPanel() {
           if (formatted.length > 0 && !selectedTenantId) {
             setSelectedTenantId(formatted[0].id);
           }
-        } else {
-          const defaultTenant: TenantAccount = {
-            id: "tenant-1",
-            slug: "studio-hair",
-            companyName: "Studio Hair & Beauty",
-            document: "12.345.678/0001-99",
-            ownerName: "Gisele Alvim",
-            ownerEmail: "gisele@gmail.com",
-            ownerPhone: "19999999999",
-            planName: "Pro",
-            monthlyFee: 149.90,
-            dueDay: 10,
-            status: "Ativo",
-            autoBlockGraceDays: 5,
-            allowedModules: PLAN_DEFAULT_MODULES["Pro"],
-            moduleRoles: {},
-            invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
-            logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
-            contractDocument: null,
-            internalNotes: "Contrato ativo.",
-            logoType: "icon",
-            logoIcon: "scissors",
-            primaryColor: "pink",
-            createdAt: "2026-01-01"
-          };
-          setTenants([defaultTenant]);
-          setSelectedTenantId(defaultTenant.id);
-          localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
         }
       } catch (err) {
         const saved = localStorage.getItem("saas_tenants_db");
@@ -369,7 +343,6 @@ export default function MasterPanel() {
     return tenants.find((t) => t.id === selectedTenantId) || tenants[0] || null;
   }, [tenants, selectedTenantId]);
 
-  // Sincroniza os dados locais de módulos e cargos sempre que selecionar um tenant diferente
   useEffect(() => {
     if (selectedTenant) {
       setTempAllowedModules(selectedTenant.allowedModules || {});
@@ -377,9 +350,10 @@ export default function MasterPanel() {
     }
   }, [selectedTenantId, selectedTenant]);
 
+  // Faturas ordenadas decrescente (mais novas em cima)
   const sortedInvoices = useMemo(() => {
     if (!selectedTenant || !selectedTenant.invoices) return [];
-    return [...selectedTenant.invoices].sort((a, b) => a.referenceMonth.localeCompare(b.referenceMonth));
+    return [...selectedTenant.invoices].sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
   }, [selectedTenant]);
 
   const filteredSystemLogs = useMemo(() => {
@@ -466,7 +440,6 @@ export default function MasterPanel() {
     }));
   };
 
-  // BOTÃO SALVAR DEFINITIVO (Com envio garantido ao Supabase)
   const handleSaveModulesAndRoles = async () => {
     if (!selectedTenant) return;
 
@@ -509,6 +482,84 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
+  const toggleTenantModuleTrial = async (moduleId: string) => {
+    if (!selectedTenant) return;
+    const currentAllowed = selectedTenant.allowedModules || {};
+    const nextState = !(currentAllowed[moduleId] ?? false);
+    
+    const expirationDate = nextState 
+      ? new Date(Date.now() + trialDaysInput * 24 * 60 * 60 * 1000).toISOString() 
+      : null;
+
+    const updatedModules = {
+      ...currentAllowed,
+      [moduleId]: nextState
+    };
+
+    setTempAllowedModules(updatedModules);
+
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
+      ...t, 
+      allowedModules: updatedModules 
+    } : t);
+    
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+    try {
+      await supabase
+        .from('tenants')
+        .update({
+          allowed_modules: updatedModules,
+          allowedModules: updatedModules,
+          dre_trial_expires_at: expirationDate,
+          ...(moduleId === 'dre' ? { dre: nextState } : {})
+        })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `Trial de Módulo [${moduleId}] ${nextState ? `Liberado por ${trialDaysInput} dias` : 'Revogado'}`);
+    setFeedbackMsg(`👑 Trial do DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'desativado!'}`);
+    setTimeout(() => setFeedbackMsg(""), 3500);
+  };
+
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>, invoiceId: string) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTenant) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Url = event.target?.result as string;
+
+      const updatedInvoices = selectedTenant.invoices.map((inv: TenantInvoice) => {
+        if (inv.id === invoiceId) {
+          return {
+            ...inv,
+            receiptUrl: base64Url,
+            receiptName: file.name
+          };
+        }
+        return inv;
+      });
+
+      const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
+      setTenants(updatedList);
+      localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
+      try {
+        await supabase
+          .from('tenants')
+          .update({ invoices: updatedInvoices })
+          .eq('slug', selectedTenant.slug);
+      } catch (e) {}
+
+      logAction(selectedTenant.companyName, `Anexou comprovante de pagamento à fatura ID: ${invoiceId}`);
+      setFeedbackMsg("✅ Comprovante anexado com sucesso!");
+      setTimeout(() => setFeedbackMsg(""), 3000);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleGenerateNextInvoice = async () => {
     if (!selectedTenant) return;
     const invoices = selectedTenant.invoices || [];
@@ -544,7 +595,8 @@ export default function MasterPanel() {
       referenceMonth: nextMonthStr,
       amount: selectedTenant.monthlyFee,
       dueDate: nextDueDate,
-      status: "Aberto"
+      status: "Aberto",
+      paymentMethod: "Pix"
     };
 
     const updatedInvoices = [...invoices, newInvoice];
@@ -684,12 +736,23 @@ export default function MasterPanel() {
     setInvoiceAmount(inv.amount);
     setInvoiceDueDate(inv.dueDate);
     setInvoiceStatus(inv.status);
+    setInvoicePaymentMethod(inv.paymentMethod || "Pix");
+    setInvoiceCardInput("");
     setIsEditInvoiceModalOpen(true);
   };
 
   const handleSaveInvoiceEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTenant || !editingInvoiceId) return;
+
+    let secureCardLast4 = undefined;
+    if (invoicePaymentMethod === "Cartão de Crédito" && invoiceCardInput.trim()) {
+      const cleanDigits = invoiceCardInput.replace(/\D/g, "");
+      const last4 = cleanDigits.slice(-4);
+      if (last4.length === 4) {
+        secureCardLast4 = `•••• ${last4}`;
+      }
+    }
 
     const updatedInvoices = selectedTenant.invoices.map((inv: TenantInvoice) => {
       if (inv.id === editingInvoiceId) {
@@ -698,7 +761,9 @@ export default function MasterPanel() {
           referenceMonth: invoiceMonth,
           amount: Number(invoiceAmount),
           dueDate: invoiceDueDate,
-          status: invoiceStatus
+          status: invoiceStatus,
+          paymentMethod: invoicePaymentMethod,
+          ...(secureCardLast4 ? { cardLast4: secureCardLast4 } : {})
         };
       }
       return inv;
@@ -718,7 +783,7 @@ export default function MasterPanel() {
     logAction(selectedTenant.companyName, `Editou a fatura da competência ${invoiceMonth}`);
     setIsEditInvoiceModalOpen(false);
     setEditingInvoiceId(null);
-    setFeedbackMsg("✅ Fatura atualizada!");
+    setFeedbackMsg("✅ Fatura atualizada com segurança!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
@@ -770,8 +835,7 @@ export default function MasterPanel() {
           ...inv,
           status: "Pago" as const,
           paidAt: new Date().toISOString().split("T")[0],
-          paymentMethod: "Pix",
-          cardLast4: "•••• 4821"
+          paymentMethod: inv.paymentMethod || "Pix"
         };
       }
       return inv;
@@ -1121,16 +1185,14 @@ export default function MasterPanel() {
                           <Sparkle size={13} /> Módulo DRE (Trial / Teste)
                         </span>
                         <button
-                          onClick={() => {
-                            handleToggleModuleLocal("dre");
-                          }}
+                          onClick={() => toggleTenantModuleTrial("dre")}
                           className={`font-bold text-xs px-3 py-2 rounded-lg border transition cursor-pointer ${
-                            tempAllowedModules?.dre 
+                            selectedTenant.allowedModules?.dre 
                               ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30" 
                               : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
                           }`}
                         >
-                          {tempAllowedModules?.dre ? "Desativar Trial" : `Liberar por ${trialDaysInput} dias`}
+                          {selectedTenant.allowedModules?.dre ? "Desativar Trial" : `Liberar por ${trialDaysInput} dias`}
                         </button>
                       </div>
 
@@ -1179,7 +1241,7 @@ export default function MasterPanel() {
                 {activeTab === "faturas" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes Pix (Ordem Crescente)</h4>
+                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes (Mais novas no topo)</h4>
                       <button onClick={handleGenerateNextInvoice} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5">
                         <Plus size={14} /> Gerar Próxima Fatura
                       </button>
@@ -1187,11 +1249,11 @@ export default function MasterPanel() {
 
                     <div className="divide-y divide-slate-800">
                       {sortedInvoices.map((inv: TenantInvoice) => (
-                        <div key={inv.id} className="py-4 space-y-2">
+                        <div key={inv.id} className="py-4 space-y-3">
                           <div className="flex justify-between items-center">
                             <div>
                               <strong className="text-white text-sm">Competência {inv.referenceMonth}</strong>
-                              <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} • Status: <span className={inv.status === 'Pago' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{inv.status}</span> {inv.paidAt ? `(Pago em ${inv.paidAt})` : ""}</p>
+                              <p className="text-slate-400 text-[11px]">Vencimento: {inv.dueDate} • Forma: <strong className="text-indigo-300">{inv.paymentMethod || "Pix"}</strong> {inv.cardLast4 ? `(${inv.cardLast4})` : ""} • Status: <span className={inv.status === 'Pago' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{inv.status}</span> {inv.paidAt ? `(Pago em ${inv.paidAt})` : ""}</p>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="font-black text-white text-sm">R$ {inv.amount.toFixed(2)}</span>
@@ -1201,7 +1263,24 @@ export default function MasterPanel() {
                                 </button>
                               )}
                               <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
-                              <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
+                              <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                            <span className="text-slate-400">Comprovante de Pagamento:</span>
+                            <div className="flex items-center gap-2">
+                              {inv.receiptUrl ? (
+                                <a href={inv.receiptUrl} target="_blank" rel="noreferrer" className="text-emerald-400 font-bold hover:underline flex items-center gap-1">
+                                  📄 {inv.receiptName || "Ver Comprovante"}
+                                </a>
+                              ) : (
+                                <span className="text-slate-500 italic">Nenhum arquivo anexado</span>
+                              )}
+                              <input type="file" ref={receiptInputRef} onChange={(e) => handleReceiptUpload(e, inv.id)} className="hidden" id={`receipt-${inv.id}`} accept="image/*,application/pdf" />
+                              <label htmlFor={`receipt-${inv.id}`} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded-lg cursor-pointer font-bold">
+                                {inv.receiptUrl ? "Substituir" : "Anexar Comprovante"}
+                              </label>
                             </div>
                           </div>
                         </div>
@@ -1287,7 +1366,7 @@ export default function MasterPanel() {
                           <div className="flex items-center gap-2">
                             <button onClick={() => openEditLoginModal(l, idx)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer"><Pencil size={15} /></button>
                             {selectedTenant.logins.length > 1 && (
-                              <button onClick={() => handleDeleteLogin(idx)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer"><Trash2 size={15} /></button>
+                              <button onClick={() => handleDeleteLogin(idx)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer"><Trash2 size={15} /></button>
                             )}
                           </div>
                         </div>
@@ -1379,12 +1458,12 @@ export default function MasterPanel() {
         </div>
       )}
 
-      {/* MODAL EDITAR FATURA */}
+      {/* MODAL EDITAR FATURA COM FORMA DE PAGAMENTO E CARTÃO SEGURO */}
       {isEditInvoiceModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">Editar Fatura</h3>
+              <h3 className="text-base font-bold text-white">Editar Fatura & Forma de Pagamento</h3>
               <button onClick={() => setIsEditInvoiceModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
 
@@ -1404,6 +1483,23 @@ export default function MasterPanel() {
                 </div>
               </div>
               <div>
+                <label className="text-slate-300 font-semibold block mb-1">Forma de Pagamento *</label>
+                <select value={invoicePaymentMethod} onChange={e => setInvoicePaymentMethod(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
+                  <option value="Pix">Pix</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                </select>
+              </div>
+
+              {invoicePaymentMethod === "Cartão de Crédito" && (
+                <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-1">
+                  <label className="text-indigo-300 font-bold block">Segurança de Dados do Cartão (PCI Compliant)</label>
+                  <p className="text-slate-400 text-[10px]">Por segurança, insira apenas os 4 últimos dígitos do cartão. Os demais dados são descartados.</p>
+                  <input type="text" maxLength={4} placeholder="Ex: 4821" value={invoiceCardInput} onChange={e => setInvoiceCardInput(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2 rounded-lg text-white font-mono" />
+                </div>
+              )}
+
+              <div>
                 <label className="text-slate-300 font-semibold block mb-1">Status *</label>
                 <select value={invoiceStatus} onChange={e => setInvoiceStatus(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
                   <option value="Aberto">Aberto</option>
@@ -1411,7 +1507,7 @@ export default function MasterPanel() {
                   <option value="Vencido">Vencido</option>
                 </select>
               </div>
-              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Fatura</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Fatura Segura</button>
             </form>
           </div>
         </div>
