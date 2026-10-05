@@ -316,22 +316,22 @@ export default function Home() {
     }
   }, []);
 
-  // Monitoramento em tempo real do status de bloqueio e módulos do DRE a cada 1.5 segundos
+  // Sincronização Absoluta e Soberana (a cada 1 segundo): Respeita o comando do Master imediatamente
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
-      const { data: savedTenants } = await supabase.from('tenants').select('*');
-      if (savedTenants && Array.isArray(savedTenants)) {
-        try {
+      try {
+        const { data: savedTenants, error } = await supabase.from('tenants').select('*');
+        if (!error && savedTenants && Array.isArray(savedTenants)) {
           const freshFound = savedTenants.find((t: any) => t.slug === currentCompany.slug);
           if (freshFound) {
             setCurrentCompany(freshFound);
             localStorage.setItem("saas_active_session_company", JSON.stringify(freshFound));
             setIsTenantBlocked(freshFound.status === "Bloqueado");
           }
-        } catch (e) {}
-      }
-    }, 1500);
+        }
+      } catch (e) {}
+    }, 1000);
     return () => clearInterval(interval);
   }, [currentCompany?.slug]);
 
@@ -583,13 +583,14 @@ export default function Home() {
     });
   }, [products, stockMoves, sales]);
 
-  const availableStockForSale = useMemo(() => {
+  const availableStockForSale = useMemo => {
     return products;
   }, [products]);
 
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
+  // Soberania do Módulo DRE: Verifica se o Plano é Ultra ou se o Master concedeu o Trial (`allowedModules.dre === true`)
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -839,14 +840,14 @@ export default function Home() {
 
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
-  // Validação de bloqueio em tempo real absoluta no topo
+  // SOBERANIA ABSOLUTA: Se o Rei decretou bloqueio, o acesso é cortado imediatamente na tela do cliente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
         <div className="w-full max-w-lg bg-slate-900 border border-rose-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-5">
           <div className="inline-flex p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 mb-2"><AlertOctagon size={48} /></div>
-          <h1 className="text-2xl font-black text-white">Acesso Temporariamente Suspenso</h1>
-          <p className="text-xs text-slate-400">O acesso a esta empresa encontra-se temporariamente suspenso por pendências no contrato.</p>
+          <h1 className="text-2xl font-black text-white">Acesso Temporariamente Suspenso pelo Master</h1>
+          <p className="text-xs text-slate-400">O acesso a esta unidade encontra-se bloqueado por determinação da administração geral.</p>
           <div className="pt-4 border-t border-slate-800 flex justify-end text-xs">
             <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar Status</span></button>
           </div>
