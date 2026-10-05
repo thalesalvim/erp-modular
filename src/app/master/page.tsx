@@ -208,7 +208,7 @@ export default function MasterPanel() {
             dueDay: Number(t.due_day || t.dueDay || 10),
             status: t.status || "Ativo",
             autoBlockGraceDays: 5,
-            allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
+            allowedModules: t.allowedModules || t.allowed_modules || { dre: true },
             invoices: t.invoices || [],
             logins: t.logins || [],
             contractDocument: t.contractDocument || null,
@@ -221,7 +221,6 @@ export default function MasterPanel() {
           setTenants(formatted);
           if (formatted.length > 0) setSelectedTenantId(formatted[0].id);
         } else {
-          // Fallback para localStorage ou dados padrão caso o Supabase venha vazio
           const saved = localStorage.getItem("saas_tenants_db");
           if (saved) {
             const parsed = JSON.parse(saved);
@@ -357,6 +356,7 @@ export default function MasterPanel() {
     if (!target) return;
     const nextStatus = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
 
+    // Atualiza diretamente na tabela 'tenants' filtrando por slug ou id
     const { error } = await supabase
       .from('tenants')
       .update({ status: nextStatus })
@@ -368,7 +368,20 @@ export default function MasterPanel() {
       setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
       setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      alert("Erro ao atualizar status na nuvem.");
+      // Tenta atualizar por id se falhar o slug
+      const { error: errId } = await supabase
+        .from('tenants')
+        .update({ status: nextStatus })
+        .eq('id', target.id);
+
+      if (!errId) {
+        setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t));
+        logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
+        setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
+        setTimeout(() => setFeedbackMsg(""), 3000);
+      } else {
+        alert("Erro ao atualizar status na nuvem.");
+      }
     }
   };
 
@@ -380,16 +393,31 @@ export default function MasterPanel() {
       [moduleId]: !(currentAllowed[moduleId] ?? true)
     };
 
+    // Atualiza usando formato compatível no Supabase
     const { error } = await supabase
       .from('tenants')
-      .update({ allowed_modules: updatedModules })
+      .update({ allowedModules: updatedModules })
       .eq('slug', selectedTenant.slug);
 
     if (!error) {
       setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
       logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
+      setFeedbackMsg("✅ Módulo atualizado com sucesso!");
+      setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      alert("Erro ao atualizar módulos na nuvem.");
+      const { error: err2 } = await supabase
+        .from('tenants')
+        .update({ allowed_modules: updatedModules })
+        .eq('slug', selectedTenant.slug);
+
+      if (!err2) {
+        setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
+        logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
+        setFeedbackMsg("✅ Módulo atualizado com sucesso!");
+        setTimeout(() => setFeedbackMsg(""), 3000);
+      } else {
+        alert("Erro ao atualizar módulos na nuvem.");
+      }
     }
   };
 
