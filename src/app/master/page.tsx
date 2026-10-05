@@ -153,6 +153,7 @@ const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
     team: false,
     customers: true,
     dre: false,
+    dre_test: false,
     settings: true
   },
   "Pro": {
@@ -167,6 +168,7 @@ const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
     team: true,
     customers: true,
     dre: false,
+    dre_test: false,
     settings: true
   },
   "Ultra": {
@@ -181,6 +183,7 @@ const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
     team: true,
     customers: true,
     dre: true,
+    dre_test: false,
     settings: true
   }
 };
@@ -208,7 +211,6 @@ export default function MasterPanel() {
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [modalError, setModalError] = useState("");
 
-  const [trialDaysInput, setTrialDaysInput] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
@@ -412,7 +414,7 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // SALVAMENTO INSTANTÂNEO DE MÓDULOS NA NUVEM
+  // SALVAMENTO INSTANTÂNEO NA NUVEM
   const handleToggleModuleInstant = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -1022,6 +1024,7 @@ export default function MasterPanel() {
     );
   }
 
+  // ADIÇÃO DO MÓDULO DUPLICADO "DRE (Teste Grátis)" PARA CONTROLE MANUAL DO MASTER
   const moduleNames = [
     { id: "dashboard", label: "Dashboard Geral" },
     { id: "calendar", label: "Agenda de Horários" },
@@ -1034,6 +1037,7 @@ export default function MasterPanel() {
     { id: "team", label: "Equipe de Colaboradoras" },
     { id: "customers", label: "Base de Clientes" },
     { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra)" },
+    { id: "dre_test", label: "⭐ Módulo DRE (Período de Teste Manual)" },
     { id: "settings", label: "Configurações Gerais" }
   ];
 
@@ -1130,83 +1134,6 @@ export default function MasterPanel() {
                     <div className="flex gap-2">
                       <button onClick={() => launchTenantDashboard(selectedTenant)} className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"><Rocket size={14} /><span>Acessar Dashboard</span></button>
                       <button onClick={() => toggleTenantBlock(selectedTenant.id)} className={`text-xs font-bold px-3 py-2.5 rounded-xl border transition cursor-pointer ${selectedTenant.status === "Bloqueado" ? "bg-emerald-600/20 text-emerald-300 border-emerald-500/30" : "bg-rose-600/20 text-rose-300 border-rose-500/30"}`}>{selectedTenant.status === "Bloqueado" ? "Desbloquear" : "Bloquear"}</button>
-                    </div>
-
-                    {/* BLOCO DE TESTE GRÁTIS (TRIAL) NO MASTER */}
-                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 mt-1">
-                      <div className="flex justify-between items-center">
-                        <strong className="text-white text-[11px] flex items-center gap-1">
-                          <Sparkle size={13} className="text-amber-400" /> Período de Teste Grátis (Trial)
-                        </strong>
-                        
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!selectedTenant) return;
-                            const currentAllowed = selectedTenant.allowedModules || {};
-                            const isCurrentlyTrialing = currentAllowed.isTrialActive === true;
-                            const nextState = !isCurrentlyTrialing;
-
-                            const expirationDate = nextState 
-                              ? new Date(Date.now() + trialDaysInput * 24 * 60 * 60 * 1000).toISOString() 
-                              : null;
-
-                            const updatedModules = {
-                              ...currentAllowed,
-                              isTrialActive: nextState,
-                              dre: nextState ? true : (currentAllowed.dre ?? false)
-                            };
-
-                            const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
-                              ...t, 
-                              allowedModules: updatedModules 
-                            } : t);
-                            
-                            setTenants(updatedList);
-                            localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-                            try {
-                              await supabase
-                                .from('tenants')
-                                .update({
-                                  allowed_modules: updatedModules,
-                                  trial_expires_at: expirationDate
-                                })
-                                .eq('slug', selectedTenant.slug);
-                            } catch (e) {}
-
-                            logAction(selectedTenant.companyName, `Trial ${nextState ? `ativado por ${trialDaysInput} dias` : 'revogado'}`);
-                            setFeedbackMsg(`👑 Teste grátis ${nextState ? `ativado por ${trialDaysInput} dias!` : 'desativado!'}`);
-                            setTimeout(() => setFeedbackMsg(""), 3500);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition border ${
-                            selectedTenant.allowedModules?.isTrialActive 
-                              ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30" 
-                              : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-                          }`}
-                        >
-                          {selectedTenant.allowedModules?.isTrialActive ? "Desativar Teste" : `Ativar Teste (${trialDaysInput}d)`}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1 border-t border-slate-900 text-[11px]">
-                        <span className="text-slate-400">Duração:</span>
-                        <select
-                          value={trialDaysInput}
-                          onChange={e => setTrialDaysInput(Number(e.target.value))}
-                          className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-white font-bold outline-none cursor-pointer text-[11px]"
-                        >
-                          <option value={3}>3 dias</option>
-                          <option value={7}>7 dias</option>
-                          <option value={15}>15 dias</option>
-                          <option value={30}>30 dias</option>
-                        </select>
-                        {selectedTenant.allowedModules?.isTrialActive && (
-                          <span className="text-emerald-400 font-bold ml-auto flex items-center gap-1 text-[10px]">
-                            <Clock size={11} /> Ativo no Board
-                          </span>
-                        )}
-                      </div>
                     </div>
                   </div>
                 </div>
