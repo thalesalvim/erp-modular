@@ -583,14 +583,27 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE EXCLUSIVO DO PLANO ULTRA
+  // DRE EXCLUSIVO DO PLANO ULTRA OU TESTE VÁLIDO
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
+    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    
+    // Se o Master desativou explicitamente no Master Control
+    if (allowedMods["dre"] === false) {
+      return false;
+    }
+
+    const trialActive = allowedMods.isTrialActive === true;
+    const trialExpiresAt = currentCompany.trial_expires_at || currentCompany.trialExpiresAt;
+    const trialValid = trialActive && (!trialExpiresAt || new Date().getTime() < new Date(trialExpiresAt).getTime());
+
+    if (trialValid) return true;
+
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     return pName.includes("ultra");
   }, [currentCompany]);
 
-  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém os bloqueios salvos após o F5)
+  // VALIDAÇÃO RIGOROSA DA NUVEM (Mantém o estado salvo após o F5)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -598,6 +611,16 @@ export default function Home() {
     }
 
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    
+    // Verifica se há um período de teste (Trial) ativo e não expirado para liberar tudo
+    const trialActive = allowedMods.isTrialActive === true;
+    const trialExpiresAt = currentCompany.trial_expires_at || currentCompany.trialExpiresAt;
+    const trialValid = trialActive && (!trialExpiresAt || new Date().getTime() < new Date(trialExpiresAt).getTime());
+
+    if (trialValid) {
+      return true;
+    }
+
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isBasic = pName.includes("básico") || pName.includes("basico");
 
