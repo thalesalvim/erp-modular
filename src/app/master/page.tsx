@@ -353,7 +353,6 @@ export default function MasterPanel() {
     }
   };
 
-  // Decreto do Rei (Master): Bloqueio / Desbloqueio
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
@@ -375,17 +374,26 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE (Blindado para salvar em múltiplos formatos)
+  // Função otimizada para liberar o Trial do DRE com validade e múltiplos formatos
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
     const nextState = !(currentAllowed[moduleId] ?? false);
+    
+    const expirationDate = nextState 
+      ? new Date(Date.now() + trialDaysInput * 24 * 60 * 60 * 1000).toISOString() 
+      : null;
+
     const updatedModules = {
       ...currentAllowed,
       [moduleId]: nextState
     };
 
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
+      ...t, 
+      allowedModules: updatedModules 
+    } : t);
+    
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
@@ -395,13 +403,16 @@ export default function MasterPanel() {
         .update({
           allowed_modules: updatedModules,
           allowedModules: updatedModules,
+          dre_trial_expires_at: expirationDate,
           ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
         .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    } catch (e) {
+      console.error("Erro ao atualizar módulo na nuvem:", e);
+    }
 
-    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${nextState ? 'Concedido (Trial)' : 'Revogado'}`);
-    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${nextState ? 'Liberado com sucesso!' : 'Bloqueado!'}`);
+    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${nextState ? `Liberado em Trial por ${trialDaysInput} dias` : 'Revogado'}`);
+    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${nextState ? `liberado por ${trialDaysInput} dias!` : 'bloqueado!'}`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
@@ -1136,7 +1147,7 @@ export default function MasterPanel() {
                 </div>
               </div>
               <div>
-                <label className="text-slate-300 font-semibold block npm-install block mb-1">Telefone / WhatsApp *</label>
+                <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
                 <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">

@@ -580,7 +580,7 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // SOBERANIA DO MÓDULO DRE (BLINDADA)
+  // SOBERANIA DO MÓDULO DRE (BLINDADA CONTRA QUALQUER FORMATO DO MASTER)
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -590,7 +590,11 @@ export default function Home() {
     const rootDre = currentCompany.dre === true || currentCompany.allow_dre === true;
     const trialAllowed = allowedMods.dre === true || allowedMods.DRE === true;
 
-    return isUltra || trialAllowed || rootDre;
+    // Validação de expiração do Trial (se houver data cadastrada)
+    const expiresAt = currentCompany.dre_trial_expires_at || currentCompany.dreTrialExpiresAt;
+    const notExpired = expiresAt ? new Date().getTime() < new Date(expiresAt).getTime() : true;
+
+    return isUltra || ((trialAllowed || rootDre) && notExpired);
   }, [currentCompany]);
 
   const filteredSales = useMemo(() => {
@@ -831,6 +835,7 @@ export default function Home() {
 
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
 
+  // SOBERANIA ABSOLUTA: Bloqueio imediato na tela do cliente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
@@ -2081,6 +2086,7 @@ export default function Home() {
         </div>
       </main>
 
+      {/* Modais do Sistema */}
       {isWidgetCustomizerOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
