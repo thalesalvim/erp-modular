@@ -250,6 +250,20 @@ export default function Home() {
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
+        } else {
+          // Mantém a sessão ativa após F5
+          const savedSession = localStorage.getItem("saas_active_session");
+          if (savedSession) {
+            try {
+              const sessionData = JSON.parse(savedSession);
+              if (sessionData && sessionData.slug === found.slug) {
+                setActiveUserName(sessionData.name);
+                setActiveUserRole(sessionData.role);
+                setActiveUserEmail(sessionData.email);
+                setIsLogged(true);
+              }
+            } catch (e) {}
+          }
         }
       }
     };
@@ -274,7 +288,7 @@ export default function Home() {
     }
   }, []);
 
-  // Monitoramento em tempo real do status de bloqueio da empresa
+  // Monitoramento em tempo real do status de bloqueio e módulos no Supabase (a cada 2 segundos)
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
@@ -291,6 +305,29 @@ export default function Home() {
     }, 2000);
     return () => clearInterval(interval);
   }, [currentCompany?.slug]);
+
+  // Temporizador de inatividade de 15 minutos
+  useEffect(() => {
+    if (!isLogged) return;
+    let inactivityTimer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        alert("Sua sessão expirou devido a 15 minutos de inatividade.");
+        handleLogout();
+      }, 15 * 60 * 1000);
+    };
+
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    resetTimer();
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [isLogged]);
 
   useEffect(() => {
     if (isLogged && activeTab) {
@@ -452,6 +489,15 @@ export default function Home() {
         setActiveUserName(matchedName);
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
+
+        // Salva sessão ativa
+        localStorage.setItem("saas_active_session", JSON.stringify({
+          slug: authCompany.slug,
+          name: matchedName,
+          role: matchedRole,
+          email: matchedEmail
+        }));
+
         setSalonConfig(prev => ({ ...prev, name: authCompany.company_name || authCompany.companyName }));
         await loadTenantData(authCompany.slug);
         setIsLogged(true);
@@ -477,6 +523,7 @@ export default function Home() {
   const handleLogout = () => {
     recordSystemLog("Logout do sistema realizado");
     localStorage.removeItem("saas_active_tenant");
+    localStorage.removeItem("saas_active_session");
     localStorage.removeItem("master_bypass_auth");
     localStorage.removeItem("master_bypass_slug");
     localStorage.removeItem("master_bypass_login_name");
@@ -513,11 +560,13 @@ export default function Home() {
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
   const hasDREAccess = useMemo(() => {
-    const pName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
+    if (!currentCompany) return false;
+    const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isUltra = pName.includes("ultra");
-    const moduleAllowed = currentCompany?.allowedModules?.dre === true;
-    return isUltra || moduleAllowed;
-  }, [currentCompany?.planName, currentCompany?.plan_name, currentCompany?.allowedModules]);
+    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
+    const trialAllowed = allowedMods.dre === true;
+    return isUltra || trialAllowed;
+  }, [currentCompany]);
 
   const filteredSales = useMemo(() => {
     if (isManager) return sales;
@@ -759,7 +808,8 @@ export default function Home() {
 
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
-  if (isTenantBlocked) {
+  // Validação de bloqueio em tempo real no topo
+  if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
         <div className="w-full max-w-lg bg-slate-900 border border-rose-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-5">
@@ -767,8 +817,12 @@ export default function Home() {
           <h1 className="text-2xl font-black text-white">Acesso Temporariamente Suspenso</h1>
           <p className="text-xs text-slate-400">O acesso a esta empresa encontra-se temporariamente suspenso por pendências no contrato.</p>
           <div className="pt-4 border-t border-slate-800 flex justify-end text-xs">
-            <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar</span></button>
+            <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar Status</span></button>
           </div>
+        </div>
+        <div className="fixed bottom-3 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">
+          <img src={handySvgDataUri} alt="HandyHub" className="w-5 h-5 rounded" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">HandyHub ERP</span>
         </div>
       </div>
     );
@@ -825,7 +879,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE CORRIGIDO */}
+        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE */}
         {isForgotModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-xs text-white">
@@ -840,15 +894,15 @@ export default function Home() {
               {forgotStep === "search" ? (
                 <div className="space-y-4">
                   <p className="text-slate-400">
-                    Não lembra seu e-mail? Digite o seu <strong>Nome</strong> ou parte do seu <strong>Usuário</strong> para localizarmos seu cadastro na base de dados.
+                    Digite o <strong>Nome</strong>, <strong>E-mail</strong> ou <strong>Usuário</strong> para localizarmos seu cadastro na base de dados.
                   </p>
                   
                   <div className="space-y-2">
-                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Pesquisar por Nome, E-mail ou Usuário</label>
+                    <label className="font-bold block text-slate-300 uppercase tracking-wider">Pesquisar Cadastro</label>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
-                        placeholder="Ex: Gisele Alvim, gisele..." 
+                        placeholder="Ex: Nome, e-mail..." 
                         value={forgotSearchQuery} 
                         onChange={e => setForgotSearchQuery(e.target.value)} 
                         className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-indigo-500"
