@@ -191,7 +191,7 @@ export default function MasterPanel() {
 
   useEffect(() => {
     setIsMounted(true);
-    const fetchTenantsFromSupabase = async () => {
+    const fetchTenants = async () => {
       try {
         const { data, error } = await supabase.from('tenants').select('*');
         if (!error && data && data.length > 0) {
@@ -220,12 +220,52 @@ export default function MasterPanel() {
           }));
           setTenants(formatted);
           if (formatted.length > 0) setSelectedTenantId(formatted[0].id);
+        } else {
+          // Fallback para localStorage ou dados padrão caso o Supabase venha vazio
+          const saved = localStorage.getItem("saas_tenants_db");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setTenants(parsed);
+            if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
+          } else {
+            const defaultTenant: TenantAccount = {
+              id: "tenant-1",
+              slug: "studio-hair",
+              companyName: "Studio Hair & Beauty",
+              document: "12.345.678/0001-99",
+              ownerName: "Gisele Alvim",
+              ownerEmail: "gisele@gmail.com",
+              ownerPhone: "19999999999",
+              planName: "Pro",
+              monthlyFee: 149.90,
+              dueDay: 10,
+              status: "Ativo",
+              autoBlockGraceDays: 5,
+              allowedModules: { dre: true },
+              invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
+              logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
+              contractDocument: null,
+              internalNotes: "Contrato ativo.",
+              logoType: "icon",
+              logoIcon: "scissors",
+              primaryColor: "pink",
+              createdAt: "2026-01-01"
+            };
+            setTenants([defaultTenant]);
+            setSelectedTenantId(defaultTenant.id);
+            localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
+          }
         }
       } catch (err) {
-        console.error("Erro ao buscar tenants no master:", err);
+        const saved = localStorage.getItem("saas_tenants_db");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTenants(parsed);
+          if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
+        }
       }
     };
-    fetchTenantsFromSupabase();
+    fetchTenants();
 
     const savedLogs = localStorage.getItem("saas_system_audit_logs");
     if (savedLogs) {
