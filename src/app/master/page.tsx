@@ -353,7 +353,7 @@ export default function MasterPanel() {
     }
   };
 
-  // Decreto do Rei (Master): Ordem Absoluta de Bloqueio/Desbloqueio com persistência em snake_case e camelCase
+  // Decreto do Rei (Master): Bloqueio / Desbloqueio
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
@@ -375,7 +375,7 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE (Salva ambos os formatos para evitar falhas)
+  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE (Blindado para salvar em múltiplos formatos)
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -394,7 +394,8 @@ export default function MasterPanel() {
         .from('tenants')
         .update({
           allowed_modules: updatedModules,
-          allowedModules: updatedModules
+          allowedModules: updatedModules,
+          ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
@@ -1135,7 +1136,7 @@ export default function MasterPanel() {
                 </div>
               </div>
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
+                <label className="text-slate-300 font-semibold block npm-install block mb-1">Telefone / WhatsApp *</label>
                 <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
