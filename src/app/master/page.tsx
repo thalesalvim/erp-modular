@@ -116,7 +116,7 @@ export interface TenantAccount {
   status: "Ativo" | "Bloqueado" | "Pendente" | "Cancelado";
   autoBlockGraceDays: number;
   allowedModules: { [key: string]: boolean };
-  moduleRoles?: { [key: string]: string[] }; // Controle de acesso por cargo
+  moduleRoles?: { [key: string]: string[] };
   invoices: TenantInvoice[];
   logins: TenantLogin[];
   contractDocument: ContractDocument | null;
@@ -164,7 +164,6 @@ export default function MasterPanel() {
   const [trialDaysInput, setTrialDaysInput] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados para edição de empresa na carteira
   const [isEditTenantModalOpen, setIsEditTenantModalOpen] = useState(false);
   const [editCompanyName, setEditCompanyName] = useState("");
   const [editOwnerName, setEditOwnerName] = useState("");
@@ -422,11 +421,10 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // GERENCIAR ACESSO POR CARGO (Dono, Gestor, Colaborador) nos módulos
   const toggleModuleRoleAccess = async (moduleId: string, roleName: string) => {
     if (!selectedTenant) return;
     const currentModuleRoles = selectedTenant.moduleRoles || {};
-    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor"]; // Padrão
+    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor"];
     
     let updatedRolesForModule = [];
     if (rolesForModule.includes(roleName)) {
@@ -456,7 +454,6 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 2500);
   };
 
-  // GERAR PRÓXIMA FATURA SEM DUPLICIDADE (Calcula com base na última competência gerada)
   const handleGenerateNextInvoice = async () => {
     if (!selectedTenant) return;
     const invoices = selectedTenant.invoices || [];
@@ -465,7 +462,6 @@ export default function MasterPanel() {
     let nextMonthNum = 11;
 
     if (invoices.length > 0) {
-      // Pega a última fatura para avançar o mês corretamente
       const lastInv = invoices[invoices.length - 1];
       const [yStr, mStr] = (lastInv.referenceMonth || "2026-10").split("-");
       let y = Number(yStr);
@@ -481,7 +477,6 @@ export default function MasterPanel() {
     const nextMonthStr = `${nextYear}-${String(nextMonthNum).padStart(2, "0")}`;
     const nextDueDate = `${nextMonthStr}-${String(selectedTenant.dueDay || 10).padStart(2, "0")}`;
 
-    // Verifica se já existe fatura para esse mês exato para evitar duplicidade
     const alreadyExists = invoices.some((inv: TenantInvoice) => inv.referenceMonth === nextMonthStr);
     if (alreadyExists) {
       alert(`⚠️ Já existe uma fatura gerada para a competência ${nextMonthStr}.`);
@@ -513,7 +508,6 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
-  // EDITAR E EXCLUIR EMPRESA DA CARTEIRA
   const openEditTenantModal = (t: TenantAccount) => {
     setEditCompanyName(t.companyName);
     setEditOwnerName(t.ownerName);
@@ -1406,4 +1400,21 @@ export default function MasterPanel() {
                 </div>
               </div>
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">
+                <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
+                <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <span className="text-[11px] font-bold text-indigo-400 block">Primeiro Acesso do Dono:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <input required placeholder="Nome de Usuário" value={newInitialUser} onChange={e => setNewInitialUser(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
+                  <input required type="password" placeholder="Senha Forte" value={newInitialPass} onChange={e => setNewInitialPass(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Criar Empresa Segura</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
