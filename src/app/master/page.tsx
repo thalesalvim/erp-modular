@@ -164,7 +164,6 @@ export default function MasterPanel() {
   const [trialDaysInput, setTrialDaysInput] = useState(7);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const receiptInputRef = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   const [newCompany, setNewCompany] = useState("");
   const [newDocument, setNewDocument] = useState("");
@@ -354,6 +353,7 @@ export default function MasterPanel() {
     }
   };
 
+  // Decreto do Rei (Master): Ordem Absoluta de Bloqueio/Desbloqueio
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
@@ -363,6 +363,7 @@ export default function MasterPanel() {
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
+    // Força atualização soberana na nuvem
     try {
       await supabase
         .from('tenants')
@@ -370,11 +371,12 @@ export default function MasterPanel() {
         .eq('slug', target.slug);
     } catch (e) {}
 
-    logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
-    setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
-    setTimeout(() => setFeedbackMsg(""), 3000);
+    logAction(target.companyName, `Decreto Real: Status alterado para ${nextStatus}`);
+    setFeedbackMsg(`👑 Ordem executada: Empresa ${nextStatus === 'Bloqueado' ? 'Bloqueada' : 'Desbloqueada'}!`);
+    setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
+  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -387,6 +389,7 @@ export default function MasterPanel() {
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
+    // Força atualização soberana na nuvem
     try {
       await supabase
         .from('tenants')
@@ -397,9 +400,9 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
-    setFeedbackMsg(`⚡ Módulo DRE ${updatedModules[moduleId] ? 'ativado (Trial)' : 'desativado'} com sucesso!`);
-    setTimeout(() => setFeedbackMsg(""), 3000);
+    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${updatedModules[moduleId] ? 'Concedido (Trial)' : 'Revogado'}`);
+    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${updatedModules[moduleId] ? 'Liberado com sucesso!' : 'Bloqueado!'}`);
+    setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
