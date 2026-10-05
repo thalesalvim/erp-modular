@@ -208,6 +208,7 @@ export default function MasterPanel() {
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [modalError, setModalError] = useState("");
 
+  const [trialDaysInput, setTrialDaysInput] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
@@ -411,7 +412,7 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // SALVAMENTO INSTANTÂNEO NA NUVEM (Usa selectedTenant diretamente sem tempAllowedModules)
+  // SALVAMENTO INSTANTÂNEO NA NUVEM
   const handleToggleModuleInstant = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -1375,7 +1376,7 @@ export default function MasterPanel() {
                 <input required type="number" step="0.01" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
               </div>
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px]">
-                ⚠️ Alterar o plano ajustará automaticamente os módulos permitidos (restringindo em caso de downgrade ou abrindo em caso de upgrade).
+                ⚠️️ Alterar o plano ajustará automaticamente os módulos permitidos (restringindo em caso de downgrade ou abrindo em caso de upgrade).
               </div>
               <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Alterações</button>
             </form>
