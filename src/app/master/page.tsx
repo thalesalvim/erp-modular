@@ -140,8 +140,6 @@ const MASTER_PLANS_LIST = [
 
 export default function MasterPanel() {
   const [isMounted, setIsMounted] = useState(false);
-
-  // Mantém a sessão do master ativa após o F5
   const [isMasterAuth, setIsMasterAuth] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("master_session_active") === "true";
@@ -226,49 +224,12 @@ export default function MasterPanel() {
             createdAt: t.created_at || "2026-01-01"
           }));
           setTenants(formatted);
-          if (formatted.length > 0) setSelectedTenantId(formatted[0].id);
-        } else {
-          const saved = localStorage.getItem("saas_tenants_db");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setTenants(parsed);
-            if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
-          } else {
-            const defaultTenant: TenantAccount = {
-              id: "tenant-1",
-              slug: "studio-hair",
-              companyName: "Studio Hair & Beauty",
-              document: "12.345.678/0001-99",
-              ownerName: "Gisele Alvim",
-              ownerEmail: "gisele@gmail.com",
-              ownerPhone: "19999999999",
-              planName: "Pro",
-              monthlyFee: 149.90,
-              dueDay: 10,
-              status: "Ativo",
-              autoBlockGraceDays: 5,
-              allowedModules: { dre: true },
-              invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
-              logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
-              contractDocument: null,
-              internalNotes: "Contrato ativo.",
-              logoType: "icon",
-              logoIcon: "scissors",
-              primaryColor: "pink",
-              createdAt: "2026-01-01"
-            };
-            setTenants([defaultTenant]);
-            setSelectedTenantId(defaultTenant.id);
-            localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
+          if (formatted.length > 0 && !selectedTenantId) {
+            setSelectedTenantId(formatted[0].id);
           }
         }
       } catch (err) {
-        const saved = localStorage.getItem("saas_tenants_db");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setTenants(parsed);
-          if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
-        }
+        console.error("Erro ao carregar tenants do Supabase:", err);
       }
     };
     fetchTenants();
@@ -360,38 +321,29 @@ export default function MasterPanel() {
     }
   };
 
+  // Função robusta de Bloqueio/Desbloqueio sincronizada com a nuvem
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
     const nextStatus = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
 
+    // Atualiza diretamente no Supabase por slug e id
     const { error } = await supabase
       .from('tenants')
       .update({ status: nextStatus })
-      .eq('slug', target.slug);
+      .or(`slug.eq.${target.slug},id.eq.${target.id}`);
 
     if (!error) {
       setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t));
       logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
-      setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
+      setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} na nuvem!`);
       setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      const { error: err2 } = await supabase
-        .from('tenants')
-        .update({ status: nextStatus })
-        .eq('id', target.id);
-
-      if (!err2) {
-        setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t));
-        logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
-        setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
-        setTimeout(() => setFeedbackMsg(""), 3000);
-      } else {
-        alert("Erro ao atualizar status na nuvem.");
-      }
+      alert("Erro ao atualizar status de bloqueio na nuvem.");
     }
   };
 
+  // Função robusta de Ativação/Desativação de Módulos (Trial DRE) sincronizada com a nuvem
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -406,30 +358,15 @@ export default function MasterPanel() {
         allowed_modules: updatedModules,
         allowedModules: updatedModules
       })
-      .eq('slug', selectedTenant.slug);
+      .or(`slug.eq.${selectedTenant.slug},id.eq.${selectedTenant.id}`);
 
     if (!error) {
       setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
       logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
-      setFeedbackMsg("✅ Módulo atualizado com sucesso!");
+      setFeedbackMsg(`⚡ Módulo DRE ${updatedModules[moduleId] ? 'ativado (Trial)' : 'desativado'} na nuvem!`);
       setTimeout(() => setFeedbackMsg(""), 3000);
     } else {
-      const { error: errId } = await supabase
-        .from('tenants')
-        .update({
-          allowed_modules: updatedModules,
-          allowedModules: updatedModules
-        })
-        .eq('id', selectedTenant.id);
-
-      if (!errId) {
-        setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
-        logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
-        setFeedbackMsg("✅ Módulo atualizado com sucesso!");
-        setTimeout(() => setFeedbackMsg(""), 3000);
-      } else {
-        alert("Erro ao atualizar módulos na nuvem.");
-      }
+      alert("Erro ao atualizar módulos na nuvem.");
     }
   };
 
