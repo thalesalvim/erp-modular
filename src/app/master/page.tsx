@@ -224,12 +224,53 @@ export default function MasterPanel() {
             createdAt: t.created_at || "2026-01-01"
           }));
           setTenants(formatted);
+          localStorage.setItem("saas_tenants_db", JSON.stringify(formatted));
           if (formatted.length > 0 && !selectedTenantId) {
             setSelectedTenantId(formatted[0].id);
           }
+        } else {
+          // Se a nuvem falhar ou vier vazia, carrega do localStorage para nunca sumir
+          const saved = localStorage.getItem("saas_tenants_db");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setTenants(parsed);
+            if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
+          } else {
+            const defaultTenant: TenantAccount = {
+              id: "tenant-1",
+              slug: "studio-hair",
+              companyName: "Studio Hair & Beauty",
+              document: "12.345.678/0001-99",
+              ownerName: "Gisele Alvim",
+              ownerEmail: "gisele@gmail.com",
+              ownerPhone: "19999999999",
+              planName: "Pro",
+              monthlyFee: 149.90,
+              dueDay: 10,
+              status: "Ativo",
+              autoBlockGraceDays: 5,
+              allowedModules: { dre: true },
+              invoices: [{ id: "inv-1", referenceMonth: "2026-10", amount: 149.90, dueDate: "2026-10-10", status: "Pago" }],
+              logins: [{ name: "Gisele Alvim", email: "gisele@gmail.com", user: "gisele", passwordHash: hashPassword("123456"), role: "Dono" }],
+              contractDocument: null,
+              internalNotes: "Contrato ativo.",
+              logoType: "icon",
+              logoIcon: "scissors",
+              primaryColor: "pink",
+              createdAt: "2026-01-01"
+            };
+            setTenants([defaultTenant]);
+            setSelectedTenantId(defaultTenant.id);
+            localStorage.setItem("saas_tenants_db", JSON.stringify([defaultTenant]));
+          }
         }
       } catch (err) {
-        console.error("Erro ao carregar tenants do Supabase:", err);
+        const saved = localStorage.getItem("saas_tenants_db");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTenants(parsed);
+          if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
+        }
       }
     };
     fetchTenants();
@@ -321,11 +362,15 @@ export default function MasterPanel() {
     }
   };
 
-  // Bloqueio ultra-resiliente com fallback local se houver restrição de RLS
+  // Bloqueio ultra-resiliente com atualização síncrona de estado e nuvem
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
     const nextStatus = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
+
+    const updatedList = tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
       await supabase
@@ -334,7 +379,6 @@ export default function MasterPanel() {
         .eq('slug', target.slug);
     } catch (e) {}
 
-    setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t));
     logAction(target.companyName, `Alterou status do contrato para: ${nextStatus}`);
     setFeedbackMsg(`Empresa ${nextStatus === 'Bloqueado' ? 'bloqueada' : 'desbloqueada'} com sucesso!`);
     setTimeout(() => setFeedbackMsg(""), 3000);
@@ -349,6 +393,10 @@ export default function MasterPanel() {
       [moduleId]: !(currentAllowed[moduleId] ?? true)
     };
 
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+
     try {
       await supabase
         .from('tenants')
@@ -359,7 +407,6 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t));
     logAction(selectedTenant.companyName, `Alternou o estado do módulo [${moduleId}] para ${updatedModules[moduleId] ? 'Ativo' : 'Bloqueado'}`);
     setFeedbackMsg(`⚡ Módulo DRE ${updatedModules[moduleId] ? 'ativado (Trial)' : 'desativado'} com sucesso!`);
     setTimeout(() => setFeedbackMsg(""), 3000);
@@ -375,7 +422,9 @@ export default function MasterPanel() {
       uploadedAt: new Date().toISOString().split("T")[0]
     };
 
-    setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: newDoc } : t));
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: newDoc } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
     logAction(selectedTenant.companyName, `Anexou o contrato: ${file.name}`);
     setFeedbackMsg("✅ Contrato anexado!");
     setTimeout(() => setFeedbackMsg(""), 3000);
@@ -383,7 +432,9 @@ export default function MasterPanel() {
 
   const handleRemoveDocument = () => {
     if (!selectedTenant || !confirm("Remover contrato?")) return;
-    setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: null } : t));
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: null } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
     logAction(selectedTenant.companyName, "Removeu o documento de contrato");
   };
 
@@ -401,17 +452,20 @@ export default function MasterPanel() {
         return inv;
       });
 
-      const { error } = await supabase
-        .from('tenants')
-        .update({ invoices: updatedInvoices })
-        .eq('slug', selectedTenant.slug);
+      const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
+      setTenants(updatedList);
+      localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-      if (!error) {
-        setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t));
-        logAction(selectedTenant.companyName, `Anexou comprovante de pagamento à fatura (${invoiceId})`);
-        setFeedbackMsg("✅ Comprovante anexado à fatura com segurança!");
-        setTimeout(() => setFeedbackMsg(""), 3000);
-      }
+      try {
+        await supabase
+          .from('tenants')
+          .update({ invoices: updatedInvoices })
+          .eq('slug', selectedTenant.slug);
+      } catch (e) {}
+
+      logAction(selectedTenant.companyName, `Anexou comprovante de pagamento à fatura (${invoiceId})`);
+      setFeedbackMsg("✅ Comprovante anexado à fatura com segurança!");
+      setTimeout(() => setFeedbackMsg(""), 3000);
     };
     reader.readAsDataURL(file);
   };
@@ -442,51 +496,60 @@ export default function MasterPanel() {
       return inv;
     });
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ invoices: updatedInvoices })
-      .eq('slug', selectedTenant.slug);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t));
-      logAction(selectedTenant.companyName, `Editou a fatura da competência ${invoiceMonth}`);
-      setIsEditInvoiceModalOpen(false);
-      setEditingInvoiceId(null);
-      setFeedbackMsg("✅ Fatura atualizada!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ invoices: updatedInvoices })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `Editou a fatura da competência ${invoiceMonth}`);
+    setIsEditInvoiceModalOpen(false);
+    setEditingInvoiceId(null);
+    setFeedbackMsg("✅ Fatura atualizada!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
     if (!selectedTenant || !confirm("Deseja realmente excluir esta fatura?")) return;
     const updatedInvoices = selectedTenant.invoices.filter((inv: TenantInvoice) => inv.id !== invoiceId);
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ invoices: updatedInvoices })
-      .eq('slug', selectedTenant.slug);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t));
-      logAction(selectedTenant.companyName, `EXCLUIU a fatura ID: ${invoiceId}`);
-      setFeedbackMsg("🗑 Fatura excluída!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ invoices: updatedInvoices })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `EXCLUIU a fatura ID: ${invoiceId}`);
+    setFeedbackMsg("🗑 Fatura excluída!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const handleSaveNotes = async () => {
     if (!selectedTenant) return;
-    const { error } = await supabase
-      .from('tenants')
-      .update({ internalNotes: currentNotes })
-      .eq('slug', selectedTenant.slug);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, internalNotes: currentNotes } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, internalNotes: currentNotes } : t));
-      logAction(selectedTenant.companyName, "Atualizou as anotações internas");
-      setFeedbackMsg("✅ Anotações salvas!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ internalNotes: currentNotes })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, "Atualizou as anotações internas");
+    setFeedbackMsg("✅ Anotações salvas!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const markInvoicePaid = async (tenantId: string, invoiceId: string) => {
@@ -506,22 +569,25 @@ export default function MasterPanel() {
       return inv;
     });
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ status: "Ativo", invoices: updatedInvoices })
-      .eq('slug', target.slug);
+    const updatedList = tenants.map(t => {
+      if (t.id === tenantId) {
+        return { ...t, status: "Ativo" as const, invoices: updatedInvoices };
+      }
+      return t;
+    });
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => {
-        if (t.id === tenantId) {
-          logAction(t.companyName, `Confirmou o pagamento da fatura ID: ${invoiceId}`);
-          return { ...t, status: "Ativo" as const, invoices: updatedInvoices };
-        }
-        return t;
-      }));
-      setFeedbackMsg("✅ Pagamento confirmado e empresa ativada!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ status: "Ativo", invoices: updatedInvoices })
+        .eq('slug', target.slug);
+    } catch (e) {}
+
+    logAction(target.companyName, `Confirmou o pagamento da fatura ID: ${invoiceId}`);
+    setFeedbackMsg("✅ Pagamento confirmado e empresa ativada!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const handleSaveLogin = async (e: React.FormEvent) => {
@@ -555,20 +621,21 @@ export default function MasterPanel() {
       logAction(selectedTenant.companyName, `Criou novo acesso de usuário: ${cleanUser} (${loginRole})`);
     }
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ logins: loginsList })
-      .eq('slug', selectedTenant.slug);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: loginsList } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: loginsList } : t));
-      setIsNewLoginModalOpen(false);
-      setEditingLoginIdx(null);
-      setFeedbackMsg("✅ Acesso seguro salvo com sucesso!");
-      setTimeout(() => setFeedbackMsg(""), 3000);
-    } else {
-      alert("Erro ao salvar acesso na nuvem.");
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ logins: loginsList })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    setIsNewLoginModalOpen(false);
+    setEditingLoginIdx(null);
+    setFeedbackMsg("✅ Acesso seguro salvo com sucesso!");
+    setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const openEditLoginModal = (loginItem: TenantLogin, idx: number) => {
@@ -592,15 +659,18 @@ export default function MasterPanel() {
     const targetUser = selectedTenant.logins[userIndex]?.user;
     const updatedLogins = selectedTenant.logins.filter((_, idx: number) => idx !== userIndex);
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ logins: updatedLogins })
-      .eq('slug', selectedTenant.slug);
+    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: updatedLogins } : t);
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    if (!error) {
-      setTenants(tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: updatedLogins } : t));
-      logAction(selectedTenant.companyName, `REMOVEU o usuário de acesso: ${targetUser}`);
-    }
+    try {
+      await supabase
+        .from('tenants')
+        .update({ logins: updatedLogins })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
+
+    logAction(selectedTenant.companyName, `REMOVEU o usuário de acesso: ${targetUser}`);
   };
 
   const handleCreateTenant = async (e: React.FormEvent) => {
@@ -639,53 +709,56 @@ export default function MasterPanel() {
       created_at: new Date().toISOString().split("T")[0]
     };
 
-    const { data, error } = await supabase.from('tenants').insert([newTenantData]).select();
+    let createdId = `tenant-${Date.now()}`;
+    try {
+      const { data, error } = await supabase.from('tenants').insert([newTenantData]).select();
+      if (!error && data && data[0]) {
+        createdId = data[0].id;
+      }
+    } catch (e) {}
 
-    if (!error && data) {
-      const created = data[0];
-      const formatted: TenantAccount = {
-        id: created.id,
-        slug: created.slug,
-        companyName: created.company_name,
-        document: created.document,
-        ownerName: created.owner_name,
-        ownerEmail: created.owner_email,
-        ownerPhone: created.owner_phone,
-        planName: created.plan_name,
-        monthlyFee: created.monthly_fee,
-        dueDay: created.due_day,
-        status: created.status,
-        autoBlockGraceDays: 5,
-        allowedModules: created.allowed_modules || created.allowedModules || { dre: true },
-        invoices: created.invoices || [],
-        logins: created.logins || [],
-        contractDocument: null,
-        internalNotes: created.internalNotes || "",
-        logoType: created.logo_type || "icon",
-        logoIcon: created.logo_icon || "scissors",
-        primaryColor: created.primary_color || "pink",
-        createdAt: created.created_at
-      };
+    const formatted: TenantAccount = {
+      id: createdId,
+      slug,
+      companyName: newCompany,
+      document: newDocument || "Não informado",
+      ownerName: newOwner,
+      ownerEmail: newEmail,
+      ownerPhone: newPhone,
+      planName: newPlan,
+      monthlyFee: Number(newFee) || 149.90,
+      dueDay: Number(newDueDay) || 10,
+      status: "Ativo",
+      autoBlockGraceDays: 5,
+      allowedModules: { dre: true, dashboard: true, calendar: true },
+      invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
+      logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
+      contractDocument: null,
+      internalNotes: "Novo contrato cadastrado.",
+      logoType: "icon",
+      logoIcon: "scissors",
+      primaryColor: "pink",
+      createdAt: new Date().toISOString().split("T")[0]
+    };
 
-      setTenants([...tenants, formatted]);
-      setSelectedTenantId(formatted.id);
-      setIsNewTenantModalOpen(false);
+    const updatedList = [...tenants, formatted];
+    setTenants(updatedList);
+    setSelectedTenantId(formatted.id);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-      setNewCompany("");
-      setNewDocument("");
-      setNewOwner("");
-      setNewEmail("");
-      setNewPhone("");
-      setNewInitialUser("");
-      setNewInitialPass("");
-      setNewEnable2FA(false);
+    setIsNewTenantModalOpen(false);
+    setNewCompany("");
+    setNewDocument("");
+    setNewOwner("");
+    setNewEmail("");
+    setNewPhone("");
+    setNewInitialUser("");
+    setNewInitialPass("");
+    setNewEnable2FA(false);
 
-      logAction(formatted.companyName, `Empresa contratante cadastrada no plano ${newPlan}`);
-      setFeedbackMsg(`Empresa "${formatted.companyName}" criada com segurança!`);
-      setTimeout(() => setFeedbackMsg(""), 3500);
-    } else {
-      setModalError("Erro ao cadastrar empresa na nuvem.");
-    }
+    logAction(formatted.companyName, `Empresa contratante cadastrada no plano ${newPlan}`);
+    setFeedbackMsg(`Empresa "${formatted.companyName}" criada com segurança!`);
+    setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;

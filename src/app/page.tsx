@@ -115,7 +115,6 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   
-  // Recupera diretamente do localStorage para o F5 manter o usuário logado instantaneamente
   const [isLogged, setIsLogged] = useState(() => {
     if (typeof window !== "undefined") {
       return Boolean(localStorage.getItem("saas_active_session"));
@@ -172,7 +171,6 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
-  // Estados para o fluxo de "Esqueci minha senha"
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [forgotSearchQuery, setForgotSearchQuery] = useState("");
   const [forgotSearchResult, setForgotSearchResult] = useState<any | null>(null);
@@ -318,7 +316,7 @@ export default function Home() {
     }
   }, []);
 
-  // Monitoramento em tempo real do status de bloqueio (a cada 2 segundos)
+  // Monitoramento em tempo real do status de bloqueio e módulos do DRE a cada 1.5 segundos
   useEffect(() => {
     if (!currentCompany?.slug) return;
     const interval = setInterval(async () => {
@@ -333,7 +331,7 @@ export default function Home() {
           }
         } catch (e) {}
       }
-    }, 2000);
+    }, 1500);
     return () => clearInterval(interval);
   }, [currentCompany?.slug]);
 
@@ -522,7 +520,6 @@ export default function Home() {
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
 
-        // Salva sessão ativa para resistir ao F5
         localStorage.setItem("saas_active_session", JSON.stringify({
           slug: authCompany.slug,
           name: matchedName,
@@ -842,7 +839,8 @@ export default function Home() {
 
   const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
 
-  if (isTenantBlocked) {
+  // Validação de bloqueio em tempo real absoluta no topo
+  if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4 font-sans relative`}>
         <div className="w-full max-w-lg bg-slate-900 border border-rose-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-5">
@@ -850,7 +848,7 @@ export default function Home() {
           <h1 className="text-2xl font-black text-white">Acesso Temporariamente Suspenso</h1>
           <p className="text-xs text-slate-400">O acesso a esta empresa encontra-se temporariamente suspenso por pendências no contrato.</p>
           <div className="pt-4 border-t border-slate-800 flex justify-end text-xs">
-            <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar</span></button>
+            <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"><RefreshCw size={13} /><span>Verificar Status</span></button>
           </div>
         </div>
       </div>
@@ -1087,8 +1085,12 @@ export default function Home() {
     if (roleNormalized.includes("colaborador")) {
       return ["calendar", "settings", "my_schedule"].includes(tab.id);
     }
-    if (!currentCompany?.allowedModules) return true;
-    return currentCompany.allowedModules[tab.id] !== false;
+    const allowedMods = currentCompany?.allowedModules || currentCompany?.allowed_modules || {};
+    if (tab.id === "dre") {
+      const pName = (currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase();
+      return pName.includes("ultra") || allowedMods.dre === true;
+    }
+    return allowedMods[tab.id] !== false;
   });
 
   return (
