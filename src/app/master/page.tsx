@@ -353,7 +353,7 @@ export default function MasterPanel() {
     }
   };
 
-  // Decreto do Rei (Master): Ordem Absoluta de Bloqueio/Desbloqueio
+  // Decreto do Rei (Master): Ordem Absoluta de Bloqueio/Desbloqueio com persistência em snake_case e camelCase
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
@@ -363,7 +363,6 @@ export default function MasterPanel() {
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    // Força atualização soberana na nuvem
     try {
       await supabase
         .from('tenants')
@@ -376,20 +375,20 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE
+  // Decreto do Rei (Master): Concessão ou Revogação do Trial do DRE (Salva ambos os formatos para evitar falhas)
   const toggleTenantModule = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
+    const nextState = !(currentAllowed[moduleId] ?? false);
     const updatedModules = {
       ...currentAllowed,
-      [moduleId]: !(currentAllowed[moduleId] ?? true)
+      [moduleId]: nextState
     };
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, allowedModules: updatedModules } : t);
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    // Força atualização soberana na nuvem
     try {
       await supabase
         .from('tenants')
@@ -400,8 +399,8 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${updatedModules[moduleId] ? 'Concedido (Trial)' : 'Revogado'}`);
-    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${updatedModules[moduleId] ? 'Liberado com sucesso!' : 'Bloqueado!'}`);
+    logAction(selectedTenant.companyName, `Decreto Real: Módulo [${moduleId}] ${nextState ? 'Concedido (Trial)' : 'Revogado'}`);
+    setFeedbackMsg(`👑 Ordem executada: Módulo DRE ${nextState ? 'Liberado com sucesso!' : 'Bloqueado!'}`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 

@@ -244,24 +244,30 @@ export default function Home() {
       }
 
       if (found) {
-        setCurrentCompany(found);
-        setSalonConfig(prev => ({ ...prev, name: found.company_name || found.companyName || "Studio Hair & Beauty" }));
+        const normalizedFound = {
+          ...found,
+          companyName: found.company_name || found.companyName,
+          planName: found.plan_name || found.planName,
+          allowedModules: found.allowed_modules || found.allowedModules || {}
+        };
+
+        setCurrentCompany(normalizedFound);
+        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Studio Hair & Beauty" }));
         
-        // ORDEM DO REI: Se estiver bloqueado na nuvem, tranca na largada
-        if (found.status === "Bloqueado") {
+        if (normalizedFound.status === "Bloqueado") {
           setIsTenantBlocked(true);
           setIsLogged(false);
           localStorage.removeItem("saas_active_session");
           return;
         }
 
-        loadTenantData(found.slug);
+        loadTenantData(normalizedFound.slug);
 
         if (masterBypassParam && masterBypassParam === storedBypass) {
           setIsMasterBypassActive(true);
-          setActiveUserName(bypassLoginName || found.owner_name || found.ownerName || "Gisele Alvim");
+          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gisele Alvim");
           setActiveUserRole(bypassLoginRole || "Dono");
-          setActiveUserEmail(found.owner_email || found.ownerEmail || "gisele@gmail.com");
+          setActiveUserEmail(normalizedFound.owner_email || "gisele@gmail.com");
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
@@ -284,10 +290,10 @@ export default function Home() {
     initializeApp();
   }, []);
 
-  // MONITORAMENTO CONTÍNUO (A cada 1 segundo): O Rei comanda, o cliente obedece imediatamente
+  // MONITORAMENTO CONTÍNUO (A cada 1 segundo): Sincronização Absoluta com o Master
   useEffect(() => {
-    if (!currentCompany?.slug && !localStorage.getItem("saas_active_tenant")) return;
-    const currentSlug = currentCompany?.slug || localStorage.getItem("saas_active_tenant") || "studio-hair";
+    const currentSlug = currentCompany?.slug || (typeof window !== "undefined" ? localStorage.getItem("saas_active_tenant") : null) || "studio-hair";
+    if (!currentSlug) return;
 
     const interval = setInterval(async () => {
       try {
@@ -295,8 +301,15 @@ export default function Home() {
         if (!error && savedTenants && Array.isArray(savedTenants)) {
           const freshFound = savedTenants.find((t: any) => t.slug === currentSlug);
           if (freshFound) {
-            setCurrentCompany(freshFound);
-            // Sincroniza o status de bloqueio em tempo real absoluta
+            const normalizedTenant = {
+              ...freshFound,
+              companyName: freshFound.company_name || freshFound.companyName,
+              planName: freshFound.plan_name || freshFound.planName,
+              allowedModules: freshFound.allowed_modules || freshFound.allowedModules || {}
+            };
+
+            setCurrentCompany(normalizedTenant);
+
             if (freshFound.status === "Bloqueado") {
               setIsTenantBlocked(true);
               setIsLogged(false);
@@ -490,20 +503,27 @@ export default function Home() {
           localStorage.removeItem("machine_saved_pass");
         }
 
-        setCurrentCompany(authCompany);
+        const normalizedAuth = {
+          ...authCompany,
+          companyName: authCompany.company_name || authCompany.companyName,
+          planName: authCompany.plan_name || authCompany.planName,
+          allowedModules: authCompany.allowed_modules || authCompany.allowedModules || {}
+        };
+
+        setCurrentCompany(normalizedAuth);
         setActiveUserName(matchedName);
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
 
         localStorage.setItem("saas_active_session", JSON.stringify({
-          slug: authCompany.slug,
+          slug: normalizedAuth.slug,
           name: matchedName,
           role: matchedRole,
           email: matchedEmail
         }));
 
-        setSalonConfig(prev => ({ ...prev, name: authCompany.company_name || authCompany.companyName }));
-        await loadTenantData(authCompany.slug);
+        setSalonConfig(prev => ({ ...prev, name: normalizedAuth.companyName }));
+        await loadTenantData(normalizedAuth.slug);
         setIsLogged(true);
 
         recordSystemLog(`Login efetuado com sucesso (${matchedRole})`);
@@ -563,14 +583,13 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // Soberania do Módulo DRE: Verifica o Plano Ultra ou a concessão via Trial pelo Master (`allowedModules.dre`)
+  // SOBERANIA DO MÓDULO DRE: Valida tanto camelCase quanto snake_case
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isUltra = pName.includes("ultra");
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
-    const trialAllowed = allowedMods.dre === true;
-    return isUltra || trialAllowed;
+    return isUltra || allowedMods.dre === true;
   }, [currentCompany]);
 
   const filteredSales = useMemo(() => {
@@ -599,13 +618,13 @@ export default function Home() {
     const todaySales = sales.filter(s => s.date === todayStr && s.status === "Concluída");
 
     const totalTodayRevenue = todayAttendances.reduce((acc, a) => acc + (Number(a.netValue) || 0), 0) +
-                              todaySales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+                            todaySales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
 
     const month = salonConfig.analysisMonth;
     const monthlyAttendances = attendances.filter(a => a.date?.startsWith(month) && a.status === "Atendido");
     const monthlySales = sales.filter(s => s.date?.startsWith(month) && s.status === "Concluída");
     const totalMonthRevenue = monthlyAttendances.reduce((sum, a) => sum + (Number(a.netValue) || 0), 0) +
-                              monthlySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+                            monthlySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -811,8 +830,6 @@ export default function Home() {
 
   if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
 
-  const handySvgDataUri = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%234F46E5'/><stop offset='50%' stop-color='%237C3AED'/><stop offset='100%' stop-color='%23DB2777'/></linearGradient></defs><rect width='500' height='500' rx='110' fill='%23090D16'/><path d='M 140 130 L 200 130 L 200 220 L 300 220 L 300 130 L 360 130 L 360 370 L 300 370 L 300 270 L 200 270 L 200 370 L 140 370 Z' fill='url(%23g)'/></svg>`;
-
   // SOBERANIA ABSOLUTA: Bloqueio imediato na tela do cliente
   if (isTenantBlocked || currentCompany?.status === "Bloqueado") {
     return (
@@ -880,7 +897,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MODAL DE RECUPERAÇÃO DE SENHA INTELIGENTE */}
         {isForgotModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 text-xs text-white">
@@ -1752,7 +1768,6 @@ export default function Home() {
                   <p className="text-[11px] opacity-70 mt-3">Vencimento todo dia {currentCompany?.dueDay || currentCompany?.due_day || 10} de cada mês.</p>
                 </div>
 
-                {/* Exibição condicional de consultorias apenas se for plano Ultra ou contratado */}
                 {((currentCompany?.planName || currentCompany?.plan_name || "").toLowerCase().includes("ultra")) ? (
                   <div className={`p-5 rounded-2xl border flex flex-col justify-between ${darkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
                     <div>
