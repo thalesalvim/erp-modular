@@ -583,14 +583,14 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE PERMITIDO APENAS NO PLANO ULTRA
+  // DRE EXCLUSIVO DO PLANO ULTRA
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     return pName.includes("ultra");
   }, [currentCompany]);
 
-  // VALIDAÇÃO DOS MÓDULOS (O DRE fica restrito ao plano Ultra)
+  // VALIDAÇÃO DOS MÓDULOS (DRE estrito ao Plano Ultra)
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -855,7 +855,7 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
-  // ABAS DO MENU (DRE GARANTIDO SEMPRE VISÍVEL)
+  // ABAS DO MENU (DRE GARANTIDO SEMPRE VISÍVEL NO MENU LATERAL)
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -968,7 +968,7 @@ export default function Home() {
               <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("attendance"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Lançar Atendimento</button>
             )}
             {activeTab === "pos" && (
-              <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("sale"); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer"><Plus size={16} /> + Nova Venda</button>
+              <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("sale"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> + Nova Venda</button>
             )}
             {activeTab === "services" && isManager && (
               <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Cabelos"); setFormDuration(30); setFormPrice(50); setServiceAssignedRole(rolesList[0] || "Cabeleireiro"); setModalType("service"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Novo Serviço</button>
@@ -1004,7 +1004,7 @@ export default function Home() {
               <p className="text-xs text-slate-400">
                 O seu plano atual não inclui o acesso a este módulo ou ele foi desativado pela administração. Faça um upgrade para o Plano Pro ou Ultra para desbloquear este recurso instantaneamente!
               </p>
-              <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
+              <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
                 ✨ Fazer Upgrade de Plano
               </button>
             </div>
@@ -1022,7 +1022,7 @@ export default function Home() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setIsWidgetCustomizerOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition">
+                      <button onClick={() => setIsWidgetCustomizerOpen(true)} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
                         <SlidersHorizontal size={15} />
                         <span>Personalizar Dashboard</span>
                       </button>
@@ -1032,7 +1032,7 @@ export default function Home() {
                         setTempWeeklyGoal(goals.weekly);
                         setTempMonthlyGoal(goals.monthly);
                         setIsGoalModalOpen(true);
-                      }} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition">
+                      }} className={`${theme.buttonBg} text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
                         <Target size={15} />
                         <span>Editar Metas</span>
                       </button>
@@ -1565,7 +1565,7 @@ export default function Home() {
                       </div>
                       <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra</h3>
                       <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Faça upgrade para o Plano Ultra!</p>
-                      <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
+                      <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
                         ✨ Conhecer o Plano Ultra
                       </button>
                     </div>
@@ -1721,7 +1721,7 @@ export default function Home() {
                                   if (isCurrent) { alert("Este já é o seu plano atual."); return; }
                                   setSelectedPlanToUpgrade(p);
                                   setIsPlanModalOpen(true);
-                                }} className={`w-full py-2 rounded-xl font-bold cursor-pointer ${isCurrent ? "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}>
+                                }} className={`w-full py-2 rounded-xl font-bold cursor-pointer ${isCurrent ? "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed" : `${theme.buttonBg} text-white`}`}>
                                   {isCurrent ? "Plano Atual" : "Selecionar Plano"}
                                 </button>
                               )}
@@ -1936,7 +1936,7 @@ export default function Home() {
               })}
             </div>
 
-            <button onClick={() => setIsWidgetCustomizerOpen(false)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
+            <button onClick={() => setIsWidgetCustomizerOpen(false)} className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
               Concluir Personalização
             </button>
           </div>
@@ -1974,7 +1974,7 @@ export default function Home() {
                 <input type="number" step="100" required value={tempMonthlyGoal} onChange={e => setTempMonthlyGoal(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" />
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
+              <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
                 Salvar Metas
               </button>
             </form>
@@ -1999,7 +1999,7 @@ export default function Home() {
                 alert(`⚠ Aviso: A alteração para o plano ${selectedPlanToUpgrade.name} foi aplicada agora.\n\nA próxima fatura será calculada com base nos dias usados proporcionalmente.`);
                 setIsPlanModalOpen(false);
                 setShowUpgradeOptions(false);
-              }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
+              }} className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
                 ⚡ Alterar Agora (Cálculo Proporcional)
               </button>
 
@@ -2052,7 +2052,7 @@ export default function Home() {
                 ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
+              <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
                 Enviar Solicitação de Consultoria
               </button>
             </form>
@@ -2092,7 +2092,7 @@ export default function Home() {
               setNewRoleName("");
             }} className="flex gap-2 pt-2 border-t">
               <input placeholder="Nova função (ex: Barbeiro)" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1 border p-2.5 rounded-xl outline-none" />
-              <button type="submit" className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer">+ Adicionar</button>
+              <button type="submit" className={`bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer`}>+ Adicionar</button>
             </form>
           </div>
         </div>
