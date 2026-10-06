@@ -56,7 +56,8 @@ import {
   Mail,
   Smartphone,
   Menu,
-  X
+  X,
+  Shield
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
@@ -171,7 +172,8 @@ export default function Home() {
 
   const [darkMode, setDarkMode] = useState(false);
 
-  // Estados para alteração de senha nas configurações
+  // Estados para o modal discreto de alteração de senha
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [passwordChangeError, setPasswordChangeError] = useState("");
@@ -579,7 +581,6 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN BLINDADO COM SUPORTE SEGURO E VERIFICAÇÃO DE HASH UNIFICADA
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -2265,136 +2266,6 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* BLOCO DE ALTERAÇÃO DE SENHA */}
-                  <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <div>
-                      <h4 className="font-bold text-sm flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                        <KeyRound size={16} />
-                        <span>Segurança: Alterar Minha Palavra-Passe</span>
-                      </h4>
-                      <p className="text-[11px] opacity-70 mt-0.5">Atualize sua senha de acesso ao sistema de forma segura.</p>
-                    </div>
-
-                    <form onSubmit={async e => {
-                      e.preventDefault();
-                      setPasswordChangeError("");
-                      setPasswordChangeSuccess("");
-
-                      if (newPasswordInputSettings !== confirmPasswordInput) {
-                        setPasswordChangeError("A nova senha e a confirmação não coincidem.");
-                        return;
-                      }
-
-                      const strengthErr = validatePasswordStrength(newPasswordInputSettings);
-                      if (strengthErr) {
-                        setPasswordChangeError(strengthErr);
-                        return;
-                      }
-
-                      try {
-                        const { data: tenantData, error: fetchErr } = await supabase
-                          .from('tenants')
-                          .select('*')
-                          .eq('slug', currentCompany.slug)
-                          .single();
-
-                        if (fetchErr || !tenantData) {
-                          setPasswordChangeError("Erro ao localizar dados da empresa na nuvem.");
-                          return;
-                        }
-
-                        const loginsList = tenantData.logins || [];
-                        const userEmailLower = activeUserEmail.toLowerCase();
-                        const userNameLower = activeUserName.toLowerCase();
-
-                        let foundMatch = false;
-                        const updatedLogins = loginsList.map((l: any) => {
-                          const lEmail = (l.email || "").toLowerCase();
-                          const lUser = (l.user || "").toLowerCase();
-                          const lName = (l.name || "").toLowerCase();
-
-                          if (lEmail === userEmailLower || lUser === userEmailLower || lName === userNameLower) {
-                            foundMatch = true;
-                            return {
-                              ...l,
-                              passwordHash: hashPassword(newPasswordInputSettings.trim())
-                            };
-                          }
-                          return l;
-                        });
-
-                        if (!foundMatch) {
-                          setPasswordChangeError("Usuário ativo não encontrado na lista de credenciais.");
-                          return;
-                        }
-
-                        const { error: updateErr } = await supabase
-                          .from('tenants')
-                          .update({ logins: updatedLogins })
-                          .eq('slug', currentCompany.slug);
-
-                        if (updateErr) {
-                          setPasswordChangeError("Erro ao salvar a nova senha na nuvem.");
-                          return;
-                        }
-
-                        setCurrentCompany((prev: any) => ({ ...prev, logins: updatedLogins }));
-                        setPasswordChangeSuccess("🎉 Senha alterada com sucesso!");
-                        setNewPasswordInputSettings("");
-                        setConfirmPasswordInput("");
-                        recordSystemLog("Alterou sua própria senha de acesso nas configurações");
-
-                        setTimeout(() => setPasswordChangeSuccess(""), 4000);
-                      } catch (err) {
-                        console.error(err);
-                        setPasswordChangeError("Ocorreu um erro inesperado ao alterar a senha.");
-                      }
-                    }} className="space-y-3 max-w-md">
-                      <div>
-                        <label className="font-bold block mb-1">Nova Senha *</label>
-                        <input
-                          type="password"
-                          required
-                          placeholder="Mínimo 8 caracteres, maiúscula, número e símbolo"
-                          value={newPasswordInputSettings}
-                          onChange={e => setNewPasswordInputSettings(e.target.value)}
-                          className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="font-bold block mb-1">Confirmar Nova Senha *</label>
-                        <input
-                          type="password"
-                          required
-                          placeholder="Repita a nova senha"
-                          value={confirmPasswordInput}
-                          onChange={e => setConfirmPasswordInput(e.target.value)}
-                          className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none"
-                        />
-                      </div>
-
-                      {passwordChangeError && (
-                        <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold">
-                          {passwordChangeError}
-                        </div>
-                      )}
-
-                      {passwordChangeSuccess && (
-                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold">
-                          {passwordChangeSuccess}
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl cursor-pointer shadow transition text-xs"
-                      >
-                        💾 Salvar Nova Senha
-                      </button>
-                    </form>
-                  </div>
-
                   {isManager && (
                     <div>
                       <label className="block mb-1 font-semibold text-slate-400">Nome da Empresa (Gerenciado exclusivamente pelo Painel Master)</label>
@@ -2501,12 +2372,179 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+
+                  {/* BOTÃO DISCRETO DE ALTERAR SENHA NA ÚLTIMA OPÇÃO */}
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                    <div>
+                      <strong className="block text-xs font-bold">Credenciais de Acesso</strong>
+                      <span className="text-[11px] opacity-60">Gerencie sua senha de login com segurança.</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPasswordChangeError("");
+                        setPasswordChangeSuccess("");
+                        setNewPasswordInputSettings("");
+                        setConfirmPasswordInput("");
+                        setIsPasswordModalOpen(true);
+                      }}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer shadow transition flex items-center gap-1.5"
+                    >
+                      <KeyRound size={14} />
+                      <span>Alterar Senha</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </>
           )}
         </div>
       </main>
+
+      {/* MODAL DISCRETO DE ALTERAÇÃO DE SENHA */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex justify-between items-center">
+              <h2 className="text-base font-bold flex items-center gap-2">
+                <Shield size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <span>Alterar Palavra-Passe de Acesso</span>
+              </h2>
+              <button onClick={() => setIsPasswordModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
+            
+            <p className="text-slate-600 dark:text-slate-400">Insira a nova senha desejada. Ela deve conter no mínimo 8 caracteres, letras maiúsculas, minúsculas, números e símbolos.</p>
+
+            <form onSubmit={async e => {
+              e.preventDefault();
+              setPasswordChangeError("");
+              setPasswordChangeSuccess("");
+
+              if (newPasswordInputSettings !== confirmPasswordInput) {
+                setPasswordChangeError("A nova senha e a confirmação não coincidem.");
+                return;
+              }
+
+              const strengthErr = validatePasswordStrength(newPasswordInputSettings);
+              if (strengthErr) {
+                setPasswordChangeError(strengthErr);
+                return;
+              }
+
+              try {
+                const { data: tenantData, error: fetchErr } = await supabase
+                  .from('tenants')
+                  .select('*')
+                  .eq('slug', currentCompany.slug)
+                  .single();
+
+                if (fetchErr || !tenantData) {
+                  setPasswordChangeError("Erro ao localizar dados da empresa na nuvem.");
+                  return;
+                }
+
+                const loginsList = tenantData.logins || [];
+                const userEmailLower = activeUserEmail.toLowerCase();
+                const userNameLower = activeUserName.toLowerCase();
+
+                let foundMatch = false;
+                const updatedLogins = loginsList.map((l: any) => {
+                  const lEmail = (l.email || "").toLowerCase();
+                  const lUser = (l.user || "").toLowerCase();
+                  const lName = (l.name || "").toLowerCase();
+
+                  if (lEmail === userEmailLower || lUser === userEmailLower || lName === userNameLower) {
+                    foundMatch = true;
+                    return {
+                      ...l,
+                      passwordHash: hashPassword(newPasswordInputSettings.trim())
+                    };
+                  }
+                  return l;
+                });
+
+                if (!foundMatch) {
+                  setPasswordChangeError("Usuário ativo não encontrado na lista de credenciais.");
+                  return;
+                }
+
+                const { error: updateErr } = await supabase
+                  .from('tenants')
+                  .update({ logins: updatedLogins })
+                  .eq('slug', currentCompany.slug);
+
+                if (updateErr) {
+                  setPasswordChangeError("Erro ao salvar a nova senha na nuvem.");
+                  return;
+                }
+
+                setCurrentCompany((prev: any) => ({ ...prev, logins: updatedLogins }));
+                setPasswordChangeSuccess("🎉 Senha alterada com sucesso!");
+                recordSystemLog("Alterou sua própria senha de acesso via painel de configurações");
+
+                setTimeout(() => {
+                  setIsPasswordModalOpen(false);
+                  setPasswordChangeSuccess("");
+                }, 2000);
+              } catch (err) {
+                console.error(err);
+                setPasswordChangeError("Ocorreu um erro inesperado ao alterar a senha.");
+              }
+            }} className="space-y-3">
+              <div>
+                <label className="font-bold block mb-1">Nova Senha *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Mínimo 8 caracteres, maiúscula, número e símbolo"
+                  value={newPasswordInputSettings}
+                  onChange={e => setNewPasswordInputSettings(e.target.value)}
+                  className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none text-slate-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">Confirmar Nova Senha *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Repita a nova senha"
+                  value={confirmPasswordInput}
+                  onChange={e => setConfirmPasswordInput(e.target.value)}
+                  className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none text-slate-800 dark:text-white"
+                />
+              </div>
+
+              {passwordChangeError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold">
+                  {passwordChangeError}
+                </div>
+              )}
+
+              {passwordChangeSuccess && (
+                <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold text-center">
+                  {passwordChangeSuccess}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="w-1/2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 font-bold py-3 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                >
+                  Salvar Nova Senha
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modais do Sistema do Cliente */}
       {isWidgetCustomizerOpen && (
