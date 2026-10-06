@@ -564,7 +564,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN INTELIGENTE COM DETECÇÃO AUTOMÁTICA DE TENANT GLOBAL (ACESSO DIRETO)
+  // LOGIN INTELIGENTE COM COMPATIBILIDADE DE HASH E ACESSO DIRETO
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -604,8 +604,8 @@ export default function Home() {
               (l.name && l.name.toLowerCase() === cleanInput)
             ) &&
             (
-              l.passwordHash === cleanPass || 
               l.passwordHash === securePassHash || 
+              l.passwordHash === cleanPass || 
               l.password === cleanPass ||
               !l.passwordHash
             )
