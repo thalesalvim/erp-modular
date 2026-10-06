@@ -564,7 +564,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN INTELIGENTE COM COMPATIBILIDADE DE HASH E ACESSO DIRETO
+  // LOGIN INTELIGENTE COM LOGS DE DIAGNÓSTICO
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -578,6 +578,17 @@ export default function Home() {
 
     try {
       const { data: savedTenants, error } = await supabase.from('tenants').select('*');
+      
+      // LOGS PARA DIAGNÓSTICO
+      console.log("=== DIAGNÓSTICO DE LOGIN ===");
+      console.log("Erro do Supabase:", error);
+      console.log("Tenants vindos do banco:", savedTenants);
+      const cleanInput = loginUser.trim().toLowerCase();
+      const cleanPass = loginPass.trim();
+      const securePassHash = hashPassword(cleanPass);
+      console.log("Usuário digitado:", cleanInput);
+      console.log("Hash gerado para a senha digitada:", securePassHash);
+
       if (error || !savedTenants || savedTenants.length === 0) {
         setLoginError("Erro ao consultar a base de dados.");
         return;
@@ -587,10 +598,6 @@ export default function Home() {
       let matchedRole = "Gestor";
       let matchedName = "Usuário";
       let matchedEmail = "";
-
-      const cleanInput = loginUser.trim().toLowerCase();
-      const cleanPass = loginPass.trim();
-      const securePassHash = hashPassword(cleanPass);
 
       for (const tenant of savedTenants) {
         if (!tenant || tenant.status === "Bloqueado") continue;
@@ -3100,7 +3107,7 @@ export default function Home() {
                   {day.isWorking && (
                     <div className="flex items-center gap-2">
                       <input type="time" value={day.openTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, openTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
-                      <span>às</span>
+      <span>às</span>
                       <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                     </div>
                   )}
@@ -3108,7 +3115,7 @@ export default function Home() {
               ))}
             </div>
             <div className="pt-2 border-t flex justify-end">
-              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir</button>
+              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir">Concluir</button>
             </div>
           </div>
         </div>
