@@ -590,30 +590,32 @@ export default function Home() {
     return pName.includes("ultra");
   }, [currentCompany]);
 
-  // VALIDAÇÃO DOS MÓDULOS (DRE estrito ao Plano Ultra)
+  // VALIDAÇÃO COM DOWNGRADE AUTOMÁTICO DE MÓDULOS RESTRITOS
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
       return true;
     }
 
-    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isBasic = pName.includes("básico") || pName.includes("basico");
+    const isPro = pName.includes("pro");
 
+    // Bloqueios automáticos por downgrade de plano
+    if (isBasic && ["promotions", "expenses", "team", "dre"].includes(tabId)) {
+      return false;
+    }
+    if (isPro && ["dre"].includes(tabId)) {
+      return false;
+    }
+
+    const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
     if (allowedMods[tabId] === false) {
       return false;
     }
 
     if (tabId === "dre") {
       return hasDREAccess;
-    }
-
-    if (tabId === "expenses" || tabId === "team" || tabId === "promotions") {
-      if (isBasic) {
-        return allowedMods[tabId] === true;
-      }
-      return true;
     }
 
     return allowedMods[tabId] ?? true;
@@ -2049,7 +2051,7 @@ export default function Home() {
               </div>
 
               <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-[11px]">
-                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
+                ℹ️️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
