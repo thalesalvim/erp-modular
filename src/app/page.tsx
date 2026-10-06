@@ -115,12 +115,8 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   
-  const [isLogged, setIsLogged] = useState(() => {
-    if (typeof window !== "undefined") {
-      return Boolean(localStorage.getItem("saas_active_session"));
-    }
-    return false;
-  });
+  // SEGURANÇA: Só considera logado se houver sessão ativa VÁLIDA
+  const [isLogged, setIsLogged] = useState(false);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
@@ -135,12 +131,6 @@ export default function Home() {
   const [rememberCredentials, setRememberCredentials] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
-
-  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
-  const [forgotSearchQuery, setForgotSearchQuery] = useState("");
-  const [forgotSearchResult, setForgotSearchResult] = useState<any | null>(null);
-  const [forgotNewPass, setForgotNewPass] = useState("");
-  const [forgotStep, setForgotStep] = useState<"search" | "reset">("search");
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -215,7 +205,7 @@ export default function Home() {
     setIsMounted(true);
     const initializeApp = async () => {
       const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
+      const slugParam = params.get("c") || "studio-hair";
       const masterBypassParam = params.get("master_bypass");
       const storedBypass = localStorage.getItem("master_bypass_auth");
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
@@ -263,7 +253,8 @@ export default function Home() {
 
         loadTenantData(normalizedFound.slug);
 
-        if (masterBypassParam && masterBypassParam === storedBypass) {
+        // O bypass do master só funciona se houver token válido na URL gerada pelo master
+        if (masterBypassParam && masterBypassParam === storedBypass && storedBypass) {
           setIsMasterBypassActive(true);
           setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gisele Alvim");
           setActiveUserRole(bypassLoginRole || "Dono");
@@ -272,17 +263,25 @@ export default function Home() {
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
         } else {
+          // Caso contrário, EXIGE que o usuário faça o login manualmente
           const savedSession = localStorage.getItem("saas_active_session");
           if (savedSession) {
             try {
               const sessionData = JSON.parse(savedSession);
-              if (sessionData) {
+              // Verifica se a sessão salva pertence exatamente a este tenant atual
+              if (sessionData && sessionData.slug === normalizedFound.slug) {
                 setActiveUserName(sessionData.name);
                 setActiveUserRole(sessionData.role);
                 setActiveUserEmail(sessionData.email);
                 setIsLogged(true);
+              } else {
+                setIsLogged(false);
               }
-            } catch (e) {}
+            } catch (e) {
+              setIsLogged(false);
+            }
+          } else {
+            setIsLogged(false);
           }
         }
       }
@@ -291,7 +290,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const currentSlug = currentCompany?.slug || (typeof window !== "undefined" ? localStorage.getItem("saas_active_tenant") : null) || "studio-hair";
+    const currentSlug = currentCompany?.slug || "studio-hair";
     if (!currentSlug) return;
 
     const interval = setInterval(async () => {
@@ -313,8 +312,6 @@ export default function Home() {
             if (freshFound.status === "Bloqueado") {
               setIsTenantBlocked(true);
               setIsLogged(false);
-            } else {
-              setIsTenantBlocked(false);
             }
           }
         }
@@ -515,6 +512,7 @@ export default function Home() {
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
 
+        // Salva a sessão amarrada ao slug do tenant para garantir segurança
         localStorage.setItem("saas_active_session", JSON.stringify({
           slug: normalizedAuth.slug,
           name: matchedName,
@@ -583,14 +581,12 @@ export default function Home() {
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
 
-  // DRE EXCLUSIVO DO PLANO ULTRA
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     return pName.includes("ultra");
   }, [currentCompany]);
 
-  // VALIDAÇÃO COM DOWNGRADE AUTOMÁTICO DE MÓDULOS RESTRITOS
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
     if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
@@ -601,7 +597,6 @@ export default function Home() {
     const isBasic = pName.includes("básico") || pName.includes("basico");
     const isPro = pName.includes("pro");
 
-    // Bloqueios automáticos por downgrade de plano
     if (isBasic && ["promotions", "expenses", "team", "dre"].includes(tabId)) {
       return false;
     }
@@ -857,7 +852,6 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
-  // ABAS DO MENU (DRE GARANTIDO SEMPRE VISÍVEL NO MENU LATERAL)
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -880,7 +874,7 @@ export default function Home() {
     if (tab.id === "my_schedule") return !isManager;
     if (tab.id === "my_plan") return isManager;
     if (tab.id === "settings") return true;
-    if (tab.id === "dre") return true; // <-- Garante que o DRE aparece sempre no menu do cliente
+    if (tab.id === "dre") return true;
 
     const moduleRolesConfig = currentCompany?.moduleRoles || currentCompany?.module_roles || {};
     const allowedRolesForThisMod = moduleRolesConfig[tab.id];
@@ -892,6 +886,83 @@ export default function Home() {
 
     return true;
   });
+
+  // SE NÃO ESTIVER LOGADO, EXIBE O ECRÃ DE LOGIN OBRIGATÓRIO (SEGURANÇA MÁXIMA)
+  if (!isLogged) {
+    return (
+      <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4`}>
+        <div className={`w-full max-w-md p-8 rounded-3xl border shadow-xl space-y-6 ${cardBgClass}`}>
+          <div className="text-center space-y-2">
+            <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 mb-1">
+              <ShieldCheck size={32} />
+            </div>
+            <h1 className="text-xl font-black">Acesso Restrito ao Sistema</h1>
+            <p className="text-xs opacity-70">Identifique-se com suas credenciais para acessar o painel da unidade.</p>
+          </div>
+
+          <form onSubmit={handleClientLogin} className="space-y-4 text-xs">
+            <div>
+              <label className="font-bold block mb-1">Usuário ou E-mail</label>
+              <input
+                type="text"
+                required
+                value={loginUser}
+                onChange={e => setLoginUser(e.target.value)}
+                placeholder="seu.usuario"
+                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+              />
+            </div>
+
+            <div>
+              <label className="font-bold block mb-1">Senha de Acesso</label>
+              <input
+                type="password"
+                required
+                value={loginPass}
+                onChange={e => setLoginPass(e.target.value)}
+                placeholder="••••••••"
+                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="remember"
+                checked={rememberCredentials}
+                onChange={e => setRememberCredentials(e.target.checked)}
+                className="rounded cursor-pointer"
+              />
+              <label htmlFor="remember" className="cursor-pointer select-none opacity-80">Lembrar credenciais neste computador</label>
+            </div>
+
+            {loginError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-xl font-bold text-center">
+                {loginError}
+              </div>
+            )}
+
+            {isTenantBlocked && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl font-bold text-center">
+                Estabelecimento Bloqueado por Inadimplência ou Contrato Suspenso.
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className={`w-full ${theme.buttonBg} text-white font-bold py-3.5 rounded-xl cursor-pointer shadow transition uppercase tracking-wider`}
+            >
+              Entrar no Sistema
+            </button>
+          </form>
+
+          <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
+            <span className="text-[11px] opacity-60">HandyHub Gestão Empresarial • Segurança Garantida</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative`}>
@@ -2051,7 +2122,7 @@ export default function Home() {
               </div>
 
               <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-[11px]">
-                ℹ️️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
+                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
@@ -2094,7 +2165,7 @@ export default function Home() {
               setNewRoleName("");
             }} className="flex gap-2 pt-2 border-t">
               <input placeholder="Nova função (ex: Barbeiro)" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1 border p-2.5 rounded-xl outline-none" />
-              <button type="submit" className={`bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer`}>+ Adicionar</button>
+              <button type="submit" className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer">+ Adicionar</button>
             </form>
           </div>
         </div>
