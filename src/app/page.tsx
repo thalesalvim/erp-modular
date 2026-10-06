@@ -552,6 +552,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
+  // Função unificada de login com suporte a hash seguro e comparação direta de fallback
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -582,7 +583,11 @@ export default function Home() {
         const match = tenantLogins.find(
           (l: any) =>
             (l.user.toLowerCase() === cleanInput || (l.email && l.email.toLowerCase() === cleanInput)) &&
-            (l.passwordHash === cleanPass || l.passwordHash === securePassHash)
+            (
+              l.passwordHash === cleanPass || 
+              l.passwordHash === securePassHash || 
+              l.password === cleanPass
+            )
         );
         if (match) {
           authCompany = tenant;
@@ -1303,7 +1308,7 @@ export default function Home() {
 
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative overflow-hidden`}>
-      {/* Botão Hambúrguer sempre disponível para alternar o ecrã inteiro */}
+      {/* Botão Hambúrguer sempre disponível (Desktop e Mobile) */}
       <div className="absolute top-3 left-4 z-30">
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -1322,7 +1327,7 @@ export default function Home() {
         />
       )}
 
-      {/* Sidebar Retrátil (Funciona perfeitamente em Desktop e Mobile) */}
+      {/* Sidebar Retrátil */}
       <aside className={`w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-30 fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out ${
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
@@ -2484,7 +2489,7 @@ export default function Home() {
               </div>
 
               <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-[11px]">
-                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
+                ℹ️️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
@@ -3013,7 +3018,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Cliente *</label><input required placeholder="Nome do cliente" value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Cliente *</label><input required value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Serviço</label><select value={formServiceName} onChange={e => { setFormServiceName(e.target.value); const s = services.find(srv => srv.name === e.target.value); if (s) setFormGrossValue(s.price); }} className="w-full border p-2.5 rounded-xl bg-white">{services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}</select></div>
                   <div>
@@ -3039,7 +3044,7 @@ export default function Home() {
                     </select>
                   </div>
                 </div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Atendimento</button>
               </form>
             )}
