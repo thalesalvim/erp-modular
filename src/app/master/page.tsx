@@ -621,7 +621,7 @@ export default function MasterPanel() {
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
-    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\nDigite o nome exato da empresa para confirmar:`);
+    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\Digite o nome exato da empresa para confirmar:`);
     
     if (confirmName !== selectedTenant.companyName) {
       alert("Nome incorreto. A exclusão foi cancelada.");
@@ -812,6 +812,24 @@ export default function MasterPanel() {
     if (!selectedTenant) return;
     setModalError("");
 
+    const cleanEmail = loginEmail.trim().toLowerCase();
+
+    // Validação de unicidade do e-mail na base de dados
+    try {
+      const { data: allTenants } = await supabase.from('tenants').select('*');
+      if (allTenants) {
+        for (const t of allTenants) {
+          if (t.slug === selectedTenant.slug) continue; // Ignora a própria empresa ao editar
+          const lgs = t.logins || [];
+          const exists = lgs.some((l: any) => l.email?.toLowerCase() === cleanEmail || l.user?.toLowerCase() === cleanEmail);
+          if (exists) {
+            alert("Este e-mail já está cadastrado no sistema. Entre em contato com o suporte para ajustar.");
+            return;
+          }
+        }
+      }
+    } catch (err) {}
+
     const cleanUser = loginUsername.trim().toLowerCase();
     const loginsList = [...(selectedTenant.logins || [])];
     const finalPasswordHash = loginPassword ? hashPassword(loginPassword) : loginsList[editingLoginIdx!].passwordHash;
@@ -819,7 +837,7 @@ export default function MasterPanel() {
     if (editingLoginIdx !== null) {
       loginsList[editingLoginIdx] = {
         name: loginName,
-        email: loginEmail,
+        email: cleanEmail,
         user: cleanUser,
         passwordHash: finalPasswordHash,
         role: loginRole,
@@ -829,7 +847,7 @@ export default function MasterPanel() {
     } else {
       loginsList.push({
         name: loginName,
-        email: loginEmail,
+        email: cleanEmail,
         user: cleanUser,
         passwordHash: finalPasswordHash,
         role: loginRole,
@@ -894,8 +912,25 @@ export default function MasterPanel() {
     e.preventDefault();
     setModalError("");
 
-    const slug = newCompany.toLowerCase().trim().replace(/[^a-z0-9]/g, "-");
+    const checkEmail = newEmail.trim().toLowerCase();
     const initialUser = newInitialUser.trim().toLowerCase();
+
+    // Validação global de unicidade do e-mail ao criar empresa
+    try {
+      const { data: allTenants } = await supabase.from('tenants').select('*');
+      if (allTenants) {
+        for (const t of allTenants) {
+          const lgs = t.logins || [];
+          const exists = lgs.some((l: any) => l.email?.toLowerCase() === checkEmail || l.user?.toLowerCase() === checkEmail);
+          if (exists) {
+            setModalError("❌ Este e-mail já está cadastrado no sistema. Entre em contato com o suporte para ajustar.");
+            return;
+          }
+        }
+      }
+    } catch (err) {}
+
+    const slug = newCompany.toLowerCase().trim().replace(/[^a-z0-9]/g, "-");
     const initialPass = newInitialPass.trim();
 
     const passErr = validatePasswordStrength(initialPass);
@@ -911,7 +946,7 @@ export default function MasterPanel() {
       company_name: newCompany,
       document: newDocument || "Não informado",
       owner_name: newOwner,
-      owner_email: newEmail,
+      owner_email: checkEmail,
       owner_phone: newPhone,
       plan_name: newPlan,
       monthly_fee: Number(newFee) || 149.90,
@@ -919,7 +954,7 @@ export default function MasterPanel() {
       status: "Ativo" as const,
       allowed_modules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
-      logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
+      logins: [{ name: newOwner, email: checkEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
       internalNotes: "Novo contrato cadastrado com ambiente seguro.",
       logo_type: "icon",
       logo_icon: "scissors",
@@ -941,7 +976,7 @@ export default function MasterPanel() {
       companyName: newCompany,
       document: newDocument || "Não informado",
       ownerName: newOwner,
-      ownerEmail: newEmail,
+      ownerEmail: checkEmail,
       ownerPhone: newPhone,
       planName: newPlan,
       monthlyFee: Number(newFee) || 149.90,
@@ -950,7 +985,7 @@ export default function MasterPanel() {
       autoBlockGraceDays: 5,
       allowedModules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
-      logins: [{ name: newOwner, email: newEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
+      logins: [{ name: newOwner, email: checkEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
       contractDocument: null,
       internalNotes: "Novo contrato cadastrado.",
       logoType: "icon",
@@ -1426,7 +1461,7 @@ export default function MasterPanel() {
         </div>
       )}
 
-      {/* MODAL ADICIONAR / EDITAR LOGIN */}
+      {/* MODAL ADICIONAR / EDITAR LOGIN (CAMPOS GENÉRICOS) */}
       {isNewLoginModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
@@ -1438,7 +1473,7 @@ export default function MasterPanel() {
             <form onSubmit={handleSaveLogin} className="space-y-3">
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Nome da Pessoa *</label>
-                <input required placeholder="Ex: Isabela Alvim" value={loginName} onChange={e => setLoginName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                <input required placeholder="Ex: Nome Completo" value={loginName} onChange={e => setLoginName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">E-mail de Contato *</label>
@@ -1447,7 +1482,7 @@ export default function MasterPanel() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">Nome de Usuário *</label>
-                  <input required placeholder="ex: isabela" value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                  <input required placeholder="ex: nome_usuario" value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">Senha (Mín. 8 chars) *</label>
@@ -1480,12 +1515,12 @@ export default function MasterPanel() {
             <form onSubmit={handleCreateTenant} className="space-y-3">
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Nome da Empresa *</label>
-                <input required placeholder="Ex: Studio Hair" value={newCompany} onChange={e => setNewCompany(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                <input required placeholder="Ex: Nome do Salão ou Loja" value={newCompany} onChange={e => setNewCompany(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">Responsável *</label>
-                  <input required placeholder="Nome" value={newOwner} onChange={e => setNewOwner(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                  <input required placeholder="Nome do Dono" value={newOwner} onChange={e => setNewOwner(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">E-mail Principal *</label>

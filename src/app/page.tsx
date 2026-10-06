@@ -146,7 +146,7 @@ export default function Home() {
   const [rememberCredentials, setRememberCredentials] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginAttempts, setLoginAttempts] = useState(0); 
-  const [lockoutUntil, setLockoutUntil] = useState(0);     
+  const [lockoutUntil, setLockoutUntil] = useState(0);      
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -564,7 +564,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN INTELIGENTE COM DETECÇÃO AUTOMÁTICA DE TENANT POR E-MAIL/USUÁRIO
+  // LOGIN INTELIGENTE COM DETECÇÃO AUTOMÁTICA DE TENANT GLOBAL (ACESSO DIRETO)
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -595,6 +595,7 @@ export default function Home() {
       for (const tenant of savedTenants) {
         if (!tenant || tenant.status === "Bloqueado") continue;
         const tenantLogins = tenant.logins || [];
+        
         const match = tenantLogins.find(
           (l: any) =>
             (
@@ -788,7 +789,7 @@ export default function Home() {
     const monthlyAttendances = attendances.filter(a => a.date?.startsWith(month) && a.status === "Atendido");
     const monthlySales = sales.filter(s => s.date?.startsWith(month) && s.status === "Concluída");
     const totalMonthRevenue = monthlyAttendances.reduce((sum, a) => sum + (Number(a.netValue) || 0), 0) +
-                            monthlySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+                              monthlySales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -2827,7 +2828,6 @@ export default function Home() {
               <form onSubmit={async e => {
                 e.preventDefault();
                 
-                // Validação de E-mail Único na base de dados antes de cadastrar
                 const checkEmail = empEmail.trim().toLowerCase();
                 try {
                   const { data: allTenants } = await supabase.from('tenants').select('*');
@@ -3101,7 +3101,7 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <input type="time" value={day.openTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, openTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                       <span>às</span>
-                      <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
+                      <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeScale => EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                     </div>
                   )}
                 </div>
