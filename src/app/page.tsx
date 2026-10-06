@@ -59,7 +59,6 @@ import {
 import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
 
-// Hash corporativo fortalecido com salt simulado de alta entropia
 function hashPassword(pass: string): string {
   try {
     let hash = 0;
@@ -147,7 +146,6 @@ export default function Home() {
   const [lockoutUntil, setLockoutUntil] = useState(0);     
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
-  // Estados do Fluxo de Recuperação de Senha ("Esqueci a senha")
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [forgotStep, setForgotStep] = useState<"identifier" | "method" | "code" | "newpass">("identifier");
   const [forgotIdentifier, setForgotIdentifier] = useState("");
@@ -178,7 +176,6 @@ export default function Home() {
   const [attendances, setAttendances] = useState<any[]>([]);
 
   const [dreViewMode, setDreViewMode] = useState<"values" | "percent" | "chart">("values");
-
   const [goals, setGoals] = useState({
     daily: 500,
     weekly: 3000,
@@ -211,6 +208,78 @@ export default function Home() {
 
   const [selectedPlanToUpgrade, setSelectedPlanToUpgrade] = useState<any | null>(null);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const [modalType, setModalType] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [formName, setFormName] = useState("");
+  const [formCategory, setFormCategory] = useState("Cabelos");
+  const [formDuration, setFormDuration] = useState(30);
+  const [formPrice, setFormPrice] = useState(50);
+  const [formCost, setFormCost] = useState(15);
+  const [formMinStock, setFormMinStock] = useState(5);
+  const [formPhone, setFormPhone] = useState("");
+  const [formAmount, setFormAmount] = useState(100);
+  const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
+  const [formTime, setTempTime] = useState("10:00");
+  const [formClientName, setFormClientName] = useState("");
+  const [formServiceName, setFormServiceName] = useState("");
+  const [formProfessionalName, setFormProfessionalName] = useState("");
+  const [formGrossValue, setFormGrossValue] = useState(50);
+  const [formPaymentMethod, setFormPaymentMethod] = useState("Pix");
+  const [formNotes, setFormNotes] = useState("");
+
+  const [serviceAssignedRole, setServiceAssignedRole] = useState("Cabeleireiro");
+
+  const [isRolesModalOpen, setIsRolesModalOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+
+  const [promoTargetItems, setPromoTargetItems] = useState<string[]>([]);
+  const [promoDuration, setPromoDuration] = useState("7 dias");
+  const [promoDiscount, setPromoDiscount] = useState(15);
+  const [promoIsAll, setPromoIsAll] = useState(false);
+
+  const [expenseCategory, setExpenseCategory] = useState("Operacional");
+  const [expenseIsRecurrent, setExpenseIsRecurrent] = useState(false);
+
+  const [empRoles, setEmpRoles] = useState<string[]>([]);
+  const [empEmail, setEmpEmail] = useState("");
+  const [empPass, setEmpPass] = useState("");
+  const [empSystemRole, setEmpSystemRole] = useState<"Gestor" | "Colaborador">("Colaborador");
+
+  const [saleProductName, setSaleProductName] = useState("");
+  const [saleClientName, setSaleClientName] = useState("");
+  const [saleQuantity, setSaleQuantity] = useState(1);
+  const [saleUnitPrice, setSaleUnitPrice] = useState(0);
+  const [salePaymentMethod, setSalePaymentMethod] = useState("Pix");
+
+  const [isApptModalOpen, setIsApptModalOpen] = useState(false);
+  const [apptDate, setApptDate] = useState(new Date().toISOString().split("T")[0]);
+  const [apptHour, setApptHour] = useState("10");
+  const [apptMinute, setApptMinute] = useState("00");
+  const apptTime = `${apptHour}:${apptMinute}`;
+
+  const [apptClientName, setApptClientName] = useState("");
+  const [apptServiceName, setApptServiceName] = useState("");
+  const [apptProfessionalName, setApptProfessionalName] = useState("");
+  const [apptNotes, setApptNotes] = useState("");
+
+  const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
+  const [selectedAppointmentToFinalize, setSelectedAppointmentToFinalize] = useState<any | null>(null);
+  const [finalizePaymentMethod, setFinalizePaymentMethod] = useState("Pix");
+  const [finalizeNotes, setFinalizeNotes] = useState("");
+
+  const [selectedEmpForSchedule, setSelectedEmpForSchedule] = useState<any | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const roleNorm = activeUserRole.toLowerCase();
+  const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
+  const isDono = roleNorm.includes("dono") || roleNorm.includes("administrador");
+
+  const loggedEmployeeObject = useMemo(() => {
+    if (isManager) return null;
+    return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
+  }, [isManager, employees, activeUserName]);
 
   const recordSystemLog = (actionDesc: string) => {
     if (!currentCompany) return;
@@ -604,6 +673,7 @@ export default function Home() {
       window.location.href = "/";
     }
   };
+
   const stockSummary = useMemo(() => {
     return products.map(prod => {
       const entries = stockMoves.filter(m => m.productName === prod.name && m.type === "Entrada").reduce((a, b) => a + b.quantity, 0);
@@ -623,10 +693,6 @@ export default function Home() {
   const availableStockForSale = useMemo(() => {
     return products;
   }, [products]);
-
-  const roleNorm = activeUserRole.toLowerCase();
-  const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
-  const isDono = roleNorm.includes("dono") || roleNorm.includes("administrador");
 
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
@@ -834,74 +900,6 @@ export default function Home() {
     );
   };
 
-  const [modalType, setModalType] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [formName, setFormName] = useState("");
-  const [formCategory, setFormCategory] = useState("Cabelos");
-  const [formDuration, setFormDuration] = useState(30);
-  const [formPrice, setFormPrice] = useState(50);
-  const [formCost, setFormCost] = useState(15);
-  const [formMinStock, setFormMinStock] = useState(5);
-  const [formPhone, setFormPhone] = useState("");
-  const [formAmount, setFormAmount] = useState(100);
-  const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
-  const [formTime, setTempTime] = useState("10:00");
-  const [formClientName, setFormClientName] = useState("");
-  const [formServiceName, setFormServiceName] = useState("");
-  const [formProfessionalName, setFormProfessionalName] = useState("");
-  const [formGrossValue, setFormGrossValue] = useState(50);
-  const [formPaymentMethod, setFormPaymentMethod] = useState("Pix");
-  const [formNotes, setFormNotes] = useState("");
-
-  const [serviceAssignedRole, setServiceAssignedRole] = useState("Cabeleireiro");
-
-  const [isRolesModalOpen, setIsRolesModalOpen] = useState(false);
-  const [newRoleName, setNewRoleName] = useState("");
-
-  const [promoTargetItems, setPromoTargetItems] = useState<string[]>([]);
-  const [promoDuration, setPromoDuration] = useState("7 dias");
-  const [promoDiscount, setPromoDiscount] = useState(15);
-  const [promoIsAll, setPromoIsAll] = useState(false);
-
-  const [expenseCategory, setExpenseCategory] = useState("Operacional");
-  const [expenseIsRecurrent, setExpenseIsRecurrent] = useState(false);
-
-  const [empRoles, setEmpRoles] = useState<string[]>([]);
-  const [empEmail, setEmpEmail] = useState("");
-  const [empPass, setEmpPass] = useState("");
-  const [empSystemRole, setEmpSystemRole] = useState<"Gestor" | "Colaborador">("Colaborador");
-
-  const [saleProductName, setSaleProductName] = useState("");
-  const [saleClientName, setSaleClientName] = useState("");
-  const [saleQuantity, setSaleQuantity] = useState(1);
-  const [saleUnitPrice, setSaleUnitPrice] = useState(0);
-  const [salePaymentMethod, setSalePaymentMethod] = useState("Pix");
-
-  const [isApptModalOpen, setIsApptModalOpen] = useState(false);
-  const [apptDate, setApptDate] = useState(new Date().toISOString().split("T")[0]);
-  const [apptHour, setApptHour] = useState("10");
-  const [apptMinute, setApptMinute] = useState("00");
-  const apptTime = `${apptHour}:${apptMinute}`;
-
-  const [apptClientName, setApptClientName] = useState("");
-  const [apptServiceName, setApptServiceName] = useState("");
-  const [apptProfessionalName, setApptProfessionalName] = useState("");
-  const [apptNotes, setApptNotes] = useState("");
-
-  const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
-  const [selectedAppointmentToFinalize, setSelectedAppointmentToFinalize] = useState<any | null>(null);
-  const [finalizePaymentMethod, setFinalizePaymentMethod] = useState("Pix");
-  const [finalizeNotes, setFinalizeNotes] = useState("");
-
-  const [selectedEmpForSchedule, setSelectedEmpForSchedule] = useState<any | null>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-
-  const loggedEmployeeObject = useMemo(() => {
-    if (isManager) return null;
-    return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
-  }, [isManager, employees, activeUserName]);
-
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -939,40 +937,49 @@ export default function Home() {
 
   if (!isLogged) {
     return (
-      <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4 relative`}>
-        <div className={`w-full max-w-md p-8 rounded-3xl border shadow-xl space-y-6 ${cardBgClass}`}>
-          <div className="text-center space-y-2">
-            <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 mb-1">
-              <ShieldCheck size={32} />
+      <div className="flex h-screen items-center justify-center font-sans bg-slate-950 text-slate-100 p-4 relative overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5 select-none">
+          <div className="w-[600px] h-[600px] rounded-3xl bg-gradient-to-tr from-indigo-500 to-pink-500 blur-3xl transform rotate-12" />
+        </div>
+        <div className="absolute top-10 left-10 opacity-15 pointer-events-none flex items-center gap-3">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-pink-600 flex items-center justify-center text-white font-black text-3xl shadow-2xl">
+            H
+          </div>
+        </div>
+
+        <div className="w-full max-w-md p-8 rounded-3xl border border-slate-800/80 shadow-2xl space-y-6 relative z-10 bg-slate-900/90 backdrop-blur-xl">
+          <div className="text-center space-y-3">
+            <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-indigo-600 to-pink-600 text-white mb-1 shadow-lg items-center justify-center w-14 h-14 font-black text-2xl tracking-tighter">
+              H
             </div>
-            <h1 className="text-xl font-black">Acesso Restrito ao Sistema</h1>
-            <p className="text-xs opacity-70">Identifique-se com suas credenciais para acessar o painel da unidade.</p>
+            <h1 className="text-xl font-black tracking-tight text-white">HandyHub Cloud</h1>
+            <p className="text-xs text-slate-400">Plataforma SaaS Centralizada • Acesso Operacional</p>
           </div>
 
           <form onSubmit={handleClientLogin} className="space-y-4 text-xs">
             <div>
-              <label className="font-bold block mb-1">Usuário ou E-mail</label>
+              <label className="font-bold block mb-1 text-slate-300">Usuário ou E-mail</label>
               <input
                 type="text"
                 required
                 value={loginUser}
                 onChange={e => setLoginUser(e.target.value)}
                 placeholder="seu.usuario"
-                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
               />
             </div>
 
             <div>
-              <label className="font-bold block mb-1">Senha de Acesso</label>
+              <label className="font-bold block mb-1 text-slate-300">Senha de Acesso</label>
               <input
                 type="password"
                 required
                 value={loginPass}
                 onChange={e => setLoginPass(e.target.value)}
                 placeholder="••••••••"
-                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
               />
-              <div className="flex justify-end mt-1">
+              <div className="flex justify-end mt-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -982,7 +989,7 @@ export default function Home() {
                     setForgotError("");
                     setForgotSuccess("");
                   }}
-                  className="text-[11px] font-bold text-indigo-500 hover:underline cursor-pointer"
+                  className="text-[11px] font-bold text-indigo-400 hover:underline cursor-pointer"
                 >
                   Esqueci a senha?
                 </button>
@@ -995,43 +1002,42 @@ export default function Home() {
                 id="remember"
                 checked={rememberCredentials}
                 onChange={e => setRememberCredentials(e.target.checked)}
-                className="rounded cursor-pointer"
+                className="rounded cursor-pointer accent-indigo-600"
               />
-              <label htmlFor="remember" className="cursor-pointer select-none opacity-80">Lembrar credenciais neste computador</label>
+              <label htmlFor="remember" className="cursor-pointer select-none text-slate-300 opacity-90">Lembrar credenciais neste computador</label>
             </div>
 
             {loginError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-xl font-bold text-center">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold text-center">
                 {loginError}
               </div>
             )}
 
             {isTenantBlocked && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl font-bold text-center">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl font-bold text-center">
                 Estabelecimento Bloqueado por Inadimplência ou Contrato Suspenso.
               </div>
             )}
 
             <button
               type="submit"
-              className={`w-full ${theme.buttonBg} text-white font-bold py-3.5 rounded-xl cursor-pointer shadow transition uppercase tracking-wider`}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl cursor-pointer shadow-lg transition uppercase tracking-wider text-xs"
             >
               Entrar no Sistema
             </button>
           </form>
 
-          <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] opacity-60">HandyHub Gestão Empresarial • Segurança Garantida</span>
+          <div className="text-center pt-3 border-t border-slate-800">
+            <span className="text-[11px] text-slate-500 font-medium">HandyHub Gestão Empresarial • Segurança Garantida</span>
           </div>
         </div>
 
-        {/* MODAL DE RECUPERAÇÃO DE SENHA PROFISSIONAL */}
         {isForgotModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className={`w-full max-w-md p-6 rounded-3xl border shadow-2xl space-y-4 text-xs ${cardBgClass}`}>
-              <div className="border-b pb-3 flex justify-between items-center">
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md p-6 rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl space-y-4 text-xs text-slate-100">
+              <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
                 <h3 className="font-bold text-sm flex items-center gap-2">
-                  <KeyRound size={16} className="text-indigo-500" />
+                  <KeyRound size={16} className="text-indigo-400" />
                   <span>Recuperação de Palavra-Passe</span>
                 </h3>
                 <button
@@ -1080,20 +1086,20 @@ export default function Home() {
                   }}
                   className="space-y-4"
                 >
-                  <p className="opacity-70">Insira o seu e-mail cadastrado ou nome de usuário para localizar a conta:</p>
+                  <p className="text-slate-400">Insira o seu e-mail cadastrado ou nome de usuário para localizar a conta:</p>
                   <div>
-                    <label className="font-bold block mb-1">E-mail ou Usuário *</label>
+                    <label className="font-bold block mb-1 text-slate-300">E-mail ou Usuário *</label>
                     <input
                       type="text"
                       required
                       placeholder="ex: gisele@gmail.com"
                       value={forgotIdentifier}
                       onChange={e => setForgotIdentifier(e.target.value)}
-                      className={`w-full border p-3 rounded-xl outline-none ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-white"
                     />
                   </div>
 
-                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
 
                   <div className="flex gap-2 pt-2">
                     <button
@@ -1105,7 +1111,7 @@ export default function Home() {
                     </button>
                     <button
                       type="submit"
-                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
                     >
                       Avançar →
                     </button>
@@ -1115,31 +1121,31 @@ export default function Home() {
 
               {forgotStep === "method" && (
                 <div className="space-y-4">
-                  <p className="opacity-70">
-                    Conta encontrada: <strong>{forgotTargetUser?.name}</strong> ({forgotTargetUser?.email || forgotTargetUser?.user})
+                  <p className="text-slate-400">
+                    Conta encontrada: <strong className="text-white">{forgotTargetUser?.name}</strong> ({forgotTargetUser?.email || forgotTargetUser?.user})
                   </p>
-                  <p className="font-bold">Escolha como deseja receber o código de verificação:</p>
+                  <p className="font-bold text-slate-300">Escolha como deseja receber o código de verificação:</p>
 
                   <div className="space-y-2">
                     <div
                       onClick={() => setForgotMethod("email")}
-                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "email" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800"}`}
+                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "email" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-950"}`}
                     >
                       <Mail size={18} className="text-indigo-400" />
                       <div>
-                        <strong className="block">Enviar por E-mail</strong>
-                        <span className="text-[10px] opacity-60">Código enviado para {forgotTargetUser?.email || "o e-mail cadastrado"}</span>
+                        <strong className="block text-white">Enviar por E-mail</strong>
+                        <span className="text-[10px] text-slate-400">Código enviado para {forgotTargetUser?.email || "o e-mail cadastrado"}</span>
                       </div>
                     </div>
 
                     <div
                       onClick={() => setForgotMethod("sms")}
-                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "sms" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800"}`}
+                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "sms" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-950"}`}
                     >
                       <Smartphone size={18} className="text-indigo-400" />
                       <div>
-                        <strong className="block">Enviar por SMS / WhatsApp</strong>
-                        <span className="text-[10px] opacity-60">Código enviado para o telemóvel cadastrado</span>
+                        <strong className="block text-white">Enviar por SMS / WhatsApp</strong>
+                        <span className="text-[10px] text-slate-400">Código enviado para o telemóvel cadastrado</span>
                       </div>
                     </div>
                   </div>
@@ -1163,7 +1169,7 @@ export default function Home() {
                         
                         setForgotStep("code");
                       }}
-                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
                     >
                       Enviar Código ➔
                     </button>
@@ -1184,11 +1190,11 @@ export default function Home() {
                   }}
                   className="space-y-4"
                 >
-                  <p className="opacity-70">
+                  <p className="text-slate-400">
                     Digite o código de verificação de 6 dígitos enviado para o seu {forgotMethod === "email" ? "e-mail" : "telemóvel"}:
                   </p>
                   <div>
-                    <label className="font-bold block mb-1">Código de 6 Dígitos *</label>
+                    <label className="font-bold block mb-1 text-slate-300">Código de 6 Dígitos *</label>
                     <input
                       type="text"
                       maxLength={6}
@@ -1196,11 +1202,11 @@ export default function Home() {
                       placeholder="123456"
                       value={forgotInputCode}
                       onChange={e => setForgotInputCode(e.target.value)}
-                      className={`w-full border p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg text-white"
                     />
                   </div>
 
-                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
 
                   <div className="flex gap-2 pt-2">
                     <button
@@ -1212,7 +1218,7 @@ export default function Home() {
                     </button>
                     <button
                       type="submit"
-                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
                     >
                       Validar Código
                     </button>
@@ -1262,20 +1268,20 @@ export default function Home() {
                   }}
                   className="space-y-4"
                 >
-                  <p className="opacity-70">Identidade confirmada! Crie uma nova palavra-passe forte (mínimo 8 caracteres, maiúscula, minúscula, número e símbolo):</p>
+                  <p className="text-slate-400">Crie uma nova palavra-passe forte (mínimo 8 caracteres, maiúscula, minúscula, número e símbolo):</p>
                   <div>
-                    <label className="font-bold block mb-1">Nova Palavra-Passe *</label>
+                    <label className="font-bold block mb-1 text-slate-300">Nova Palavra-Passe *</label>
                     <input
                       type="password"
                       required
                       placeholder="Ex: SenhaForte@2026"
                       value={newPasswordInput}
                       onChange={e => setNewPasswordInput(e.target.value)}
-                      className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white"
                     />
                   </div>
 
-                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
                   {forgotSuccess && <div className="p-3 bg-emerald-500/20 text-emerald-400 font-bold rounded-xl text-center">{forgotSuccess}</div>}
 
                   <button
@@ -1513,7 +1519,7 @@ export default function Home() {
                           <p className="text-xs opacity-60 py-4 text-center">Nenhum profissional registrado.</p>
                         ) : (
                           <div className="divide-y divide-slate-100 text-xs">
-                            {operationalDashboardMetrics.teamPerformance.map((emp, idx) => (
+                            {operationalDashboardMetrics.teamPerformance.map((emp: any, idx: number) => (
                               <div key={idx} className="py-2.5 flex justify-between items-center">
                                 <div>
                                   <strong>{emp.name}</strong>
@@ -1534,7 +1540,7 @@ export default function Home() {
                           <p className="text-xs opacity-60 py-4 text-center">Estoque regular, nenhum alerta crítico.</p>
                         ) : (
                           <div className="divide-y divide-slate-100 text-xs">
-                            {operationalDashboardMetrics.lowStockItems.map((prod, idx) => (
+                            {operationalDashboardMetrics.lowStockItems.map((prod: any, idx: number) => (
                               <div key={idx} className="py-2.5 flex justify-between items-center">
                                 <div>
                                   <strong className="text-rose-500">{prod.name}</strong>
@@ -1562,7 +1568,7 @@ export default function Home() {
                       <div className="p-12 text-center opacity-60 text-xs">Nenhum agendamento marcado.</div>
                     ) : (
                       <div className="divide-y divide-slate-100">
-                        {filteredAppointments.map(item => (
+                        {filteredAppointments.map((item: any) => (
                           <div key={item.id} className="p-4 flex justify-between items-center">
                             <div className="flex items-center gap-4">
                               <span className="font-black text-sm bg-slate-100 text-slate-900 px-3 py-1.5 rounded-xl">{item.time}</span>
@@ -1604,7 +1610,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <h3 className="font-bold text-base">Atendimentos</h3>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {filteredAttendances.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum atendimento.</p> : filteredAttendances.map(a => <div key={a.id} className="py-2.5 flex justify-between items-center"><div><strong>{a.clientName}</strong> - {a.serviceName} ({a.professionalName}) • <span className="font-bold">R$ {Number(a.netValue).toFixed(2)} ({a.paymentMethod})</span> {a.notes ? <span className="opacity-60 italic">[{a.notes}]</span> : ""}</div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(a.id); setFormDate(a.date); setTempTime(a.time || "10:00"); setFormClientName(a.clientName); setFormServiceName(a.serviceName); setFormProfessionalName(a.professionalName); setFormGrossValue(a.netValue); setFormPaymentMethod(a.paymentMethod || "Pix"); setFormNotes(a.notes || ""); setModalType("attendance"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir atendimento?")) return; recordSystemLog(`Excluiu atendimento de ${a.clientName}`); const updated = attendances.filter(item => item.id !== a.id); setAttendances(updated); saveTenantData("attendances", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {filteredAttendances.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum atendimento.</p> : filteredAttendances.map((a: any) => <div key={a.id} className="py-2.5 flex justify-between items-center"><div><strong>{a.clientName}</strong> - {a.serviceName} ({a.professionalName}) • <span className="font-bold">R$ {Number(a.netValue).toFixed(2)} ({a.paymentMethod})</span> {a.notes ? <span className="opacity-60 italic">[{a.notes}]</span> : ""}</div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(a.id); setFormDate(a.date); setTempTime(a.time || "10:00"); setFormClientName(a.clientName); setFormServiceName(a.serviceName); setFormProfessionalName(a.professionalName); setFormGrossValue(a.netValue); setFormPaymentMethod(a.paymentMethod || "Pix"); setFormNotes(a.notes || ""); setModalType("attendance"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir atendimento?")) return; recordSystemLog(`Excluiu atendimento de ${a.clientName}`); const updated = attendances.filter(item => item.id !== a.id); setAttendances(updated); saveTenantData("attendances", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1637,7 +1643,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <h3 className="font-bold text-base">Vendas</h3>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {filteredSales.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma venda.</p> : filteredSales.map(s => <div key={s.id} className="py-2.5 flex justify-between items-center"><span>{s.productName} ({s.quantity} un) - {s.clientName} • Vendedor: <strong>{s.sellerName || "Geral"}</strong> • Pagamento: <strong>{s.paymentMethod}</strong> • <strong className="text-emerald-600">R$ {Number(s.total).toFixed(2)}</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setSaleProductName(s.productName); setSaleClientName(s.clientName); setSaleQuantity(s.quantity); setSaleUnitPrice(s.unitPrice); setSalePaymentMethod(s.paymentMethod || "Pix"); setModalType("sale"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Venda"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir venda?")) return; recordSystemLog(`Excluiu a venda do produto ${s.productName}`); const updated = sales.filter(item => item.id !== s.id); setSales(updated); saveTenantData("sales", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir Venda"><Trash2 size={14} /></button></div></div>)}
+                      {filteredSales.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma venda.</p> : filteredSales.map((s: any) => <div key={s.id} className="py-2.5 flex justify-between items-center"><span>{s.productName} ({s.quantity} un) - {s.clientName} • Vendedor: <strong>{s.sellerName || "Geral"}</strong> • Pagamento: <strong>{s.paymentMethod}</strong> • <strong className="text-emerald-600">R$ {Number(s.total).toFixed(2)}</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setSaleProductName(s.productName); setSaleClientName(s.clientName); setSaleQuantity(s.quantity); setSaleUnitPrice(s.unitPrice); setSalePaymentMethod(s.paymentMethod || "Pix"); setModalType("sale"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Venda"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir venda?")) return; recordSystemLog(`Excluiu a venda do produto ${s.productName}`); const updated = sales.filter(item => item.id !== s.id); setSales(updated); saveTenantData("sales", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir Venda"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1653,7 +1659,7 @@ export default function Home() {
                       {products.length === 0 ? (
                         <p className="opacity-60 py-4 text-center">Nenhum produto cadastrado.</p>
                       ) : (
-                        stockSummary.map(p => (
+                        stockSummary.map((p: any) => (
                           <div key={p.id} className="py-3 flex justify-between items-center">
                             <div>
                               <strong className="text-sm block">{p.name}</strong>
@@ -3035,7 +3041,9 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div className="pt-2 border-t flex justify-end"><button onClick={() => setSelectedEmpForSchedule(null)} className={`${theme.buttonBg} text-white font-bold px-5 py-2 rounded-xl cursor-pointer`}>Concluir</button></div>
+            <div className="pt-2 border-t flex justify-end">
+              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir</button>
+            </div>
           </div>
         </div>
       )}
