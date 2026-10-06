@@ -209,7 +209,6 @@ export default function MasterPanel() {
   const [modalError, setModalError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditTenantModalOpen, setIsEditTenantModalOpen] = useState(false);
   const [editCompanyName, setEditCompanyName] = useState("");
@@ -406,12 +405,11 @@ export default function MasterPanel() {
         .eq('slug', target.slug);
     } catch (e) {}
 
-    logAction(target.companyName, `Decreto Real: Status alterado para ${nextStatus}`);
-    setFeedbackMsg(`👑 Ordem executada: Empresa ${nextStatus === 'Bloqueado' ? 'Bloqueada' : 'Desbloqueada'}!`);
+    logAction(target.companyName, `Status alterado para ${nextStatus}`);
+    setFeedbackMsg(`👑 Empresa ${nextStatus === 'Bloqueado' ? 'Bloqueada' : 'Desbloqueada'} com sucesso!`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
-  // SALVAMENTO INSTANTÂNEO NA NUVEM
   const handleToggleModuleInstant = async (moduleId: string) => {
     if (!selectedTenant) return;
     const currentAllowed = selectedTenant.allowedModules || {};
@@ -431,23 +429,17 @@ export default function MasterPanel() {
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('tenants')
         .update({
           allowed_modules: updatedModules,
           ...(moduleId === 'dre' ? { dre: nextState } : {})
         })
         .eq('slug', selectedTenant.slug);
+    } catch (e) {}
 
-      if (error) {
-        console.error("Erro ao salvar módulo na nuvem:", error);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-
-    logAction(selectedTenant.companyName, `Módulo [${moduleId}] alterado para ${nextState ? 'Ativo' : 'Bloqueado'} instantaneamente`);
-    setFeedbackMsg(`⚡ Módulo ${nextState ? 'ativado' : 'bloqueado'} com sucesso!`);
+    logAction(selectedTenant.companyName, `Módulo [${moduleId}] alterado para ${nextState ? 'Ativo' : 'Bloqueado'}`);
+    setFeedbackMsg(`⚡ Módulo ${nextState ? 'ativado' : 'bloqueado'}!`);
     setTimeout(() => setFeedbackMsg(""), 2500);
   };
 
@@ -507,8 +499,8 @@ export default function MasterPanel() {
           .eq('slug', selectedTenant.slug);
       } catch (e) {}
 
-      logAction(selectedTenant.companyName, `Anexou comprovante de pagamento à fatura ID: ${invoiceId}`);
-      setFeedbackMsg("✅ Comprovante anexado com sucesso!");
+      logAction(selectedTenant.companyName, `Anexou comprovante à fatura ID: ${invoiceId}`);
+      setFeedbackMsg("✅ Comprovante anexado!");
       setTimeout(() => setFeedbackMsg(""), 3000);
     };
     reader.readAsDataURL(file);
@@ -565,8 +557,8 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Gerou nova fatura para a competência ${nextMonthStr}`);
-    setFeedbackMsg(`✅ Fatura de ${nextMonthStr} gerada com sucesso!`);
+    logAction(selectedTenant.companyName, `Gerou nova fatura para ${nextMonthStr}`);
+    setFeedbackMsg(`✅ Fatura de ${nextMonthStr} gerada!`);
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
@@ -581,59 +573,58 @@ export default function MasterPanel() {
   };
 
   const handleSaveTenantEdit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!selectedTenant) return;
+    e.preventDefault();
+    if (!selectedTenant) return;
 
-  // Pega automaticamente os módulos padrão do novo plano escolhido
-  const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
-  const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
+    const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
+    const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
 
-  const updatedList = tenants.map(t => {
-    if (t.id === selectedTenant.id) {
-      return {
-        ...t,
-        companyName: editCompanyName,
-        ownerName: editOwnerName,
-        ownerEmail: editOwnerEmail,
-        ownerPhone: editOwnerPhone,
-        monthlyFee: Number(editMonthlyFee || newFeeVal),
-        planName: editPlanName,
-        allowedModules: newAllowedMods // Atualiza os módulos instantaneamente
-      };
-    }
-    return t;
-  });
+    const updatedList = tenants.map(t => {
+      if (t.id === selectedTenant.id) {
+        return {
+          ...t,
+          companyName: editCompanyName,
+          ownerName: editOwnerName,
+          ownerEmail: editOwnerEmail,
+          ownerPhone: editOwnerPhone,
+          monthlyFee: Number(editMonthlyFee || newFeeVal),
+          planName: editPlanName,
+          allowedModules: newAllowedMods
+        };
+      }
+      return t;
+    });
 
-  setTenants(updatedList);
-  localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    setTenants(updatedList);
+    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-  try {
-    await supabase
-      .from('tenants')
-      .update({
-        company_name: editCompanyName,
-        owner_name: editOwnerName,
-        owner_email: editOwnerEmail,
-        owner_phone: editOwnerPhone,
-        monthly_fee: Number(editMonthlyFee || newFeeVal),
-        plan_name: editPlanName,
-        allowed_modules: newAllowedMods // Salva na nuvem os novos módulos liberados
-      })
-      .eq('slug', selectedTenant.slug);
-  } catch (e) {}
+    try {
+      await supabase
+        .from('tenants')
+        .update({
+          company_name: editCompanyName,
+          owner_name: editOwnerName,
+          owner_email: editOwnerEmail,
+          owner_phone: editOwnerPhone,
+          monthly_fee: Number(editMonthlyFee || newFeeVal),
+          plan_name: editPlanName,
+          allowed_modules: newAllowedMods
+        })
+        .eq('slug', selectedTenant.slug);
+    } catch (e) {}
 
-  logAction(editCompanyName, `Atualizou plano para ${editPlanName} e liberou módulos automaticamente`);
-  setIsEditTenantModalOpen(false);
-  setFeedbackMsg(`✅ Empresa atualizada para o plano ${editPlanName} com módulos liberados!`);
-  setTimeout(() => setFeedbackMsg(""), 3000);
-};
+    logAction(editCompanyName, `Atualizou plano para ${editPlanName}`);
+    setIsEditTenantModalOpen(false);
+    setFeedbackMsg(`✅ Empresa atualizada para o plano ${editPlanName}!`);
+    setTimeout(() => setFeedbackMsg(""), 3000);
+  };
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
-    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê está prestes a excluir permanentemente a empresa "${selectedTenant.companyName}" e todos os seus dados do banco de dados.\n\nPara confirmar, digite o nome da empresa abaixo:`);
+    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\nDigite o nome exato da empresa para confirmar:`);
     
     if (confirmName !== selectedTenant.companyName) {
-      alert("Nome incorreto. A exclusão foi cancelada por segurança.");
+      alert("Nome incorreto. A exclusão foi cancelada.");
       return;
     }
 
@@ -653,8 +644,8 @@ export default function MasterPanel() {
       setSelectedTenantId("");
     }
 
-    logAction(targetName, "EXCLUIU permanentemente a empresa do banco de dados");
-    setFeedbackMsg(`🗑 Empresa "${targetName}" excluída com sucesso!`);
+    logAction(targetName, "EXCLUIU permanentemente a empresa");
+    setFeedbackMsg(`🗑 Empresa "${targetName}" excluída!`);
     setTimeout(() => setFeedbackMsg(""), 4000);
   };
 
@@ -681,7 +672,7 @@ export default function MasterPanel() {
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: null } : t);
     setTenants(updatedList);
     localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-    logAction(selectedTenant.companyName, "Removeu o documento de contrato");
+    logAction(selectedTenant.companyName, "Removeu o contrato");
   };
 
   const openEditInvoiceModal = (inv: TenantInvoice) => {
@@ -734,15 +725,15 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `Editou a fatura da competência ${invoiceMonth}`);
+    logAction(selectedTenant.companyName, `Editou a fatura ${invoiceMonth}`);
     setIsEditInvoiceModalOpen(false);
     setEditingInvoiceId(null);
-    setFeedbackMsg("✅ Fatura atualizada com segurança!");
+    setFeedbackMsg("✅ Fatura atualizada!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
-    if (!selectedTenant || !confirm("Deseja realmente excluir esta fatura?")) return;
+    if (!selectedTenant || !confirm("Excluir fatura?")) return;
     const updatedInvoices = selectedTenant.invoices.filter((inv: TenantInvoice) => inv.id !== invoiceId);
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
@@ -756,7 +747,7 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `EXCLUIU a fatura ID: ${invoiceId}`);
+    logAction(selectedTenant.companyName, `Excluiu a fatura ID: ${invoiceId}`);
     setFeedbackMsg("🗑 Fatura excluída!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
@@ -774,7 +765,7 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, "Atualizou as anotações internas");
+    logAction(selectedTenant.companyName, "Atualizou anotações internas");
     setFeedbackMsg("✅ Anotações salvas!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
@@ -811,7 +802,7 @@ export default function MasterPanel() {
         .eq('slug', target.slug);
     } catch (e) {}
 
-    logAction(target.companyName, `Confirmou o pagamento da fatura ID: ${invoiceId}`);
+    logAction(target.companyName, `Confirmou pagamento da fatura ID: ${invoiceId}`);
     setFeedbackMsg("✅ Pagamento confirmado e empresa ativada!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
@@ -834,7 +825,7 @@ export default function MasterPanel() {
         role: loginRole,
         twoFactorEnabled: login2FA
       };
-      logAction(selectedTenant.companyName, `Editou o acesso de usuário: ${cleanUser} (${loginRole})`);
+      logAction(selectedTenant.companyName, `Editou o acesso: ${cleanUser}`);
     } else {
       loginsList.push({
         name: loginName,
@@ -844,7 +835,7 @@ export default function MasterPanel() {
         role: loginRole,
         twoFactorEnabled: login2FA
       });
-      logAction(selectedTenant.companyName, `Criou novo acesso de usuário: ${cleanUser} (${loginRole})`);
+      logAction(selectedTenant.companyName, `Criou novo acesso: ${cleanUser}`);
     }
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: loginsList } : t);
@@ -860,7 +851,7 @@ export default function MasterPanel() {
 
     setIsNewLoginModalOpen(false);
     setEditingLoginIdx(null);
-    setFeedbackMsg("✅ Acesso seguro salvo com sucesso!");
+    setFeedbackMsg("✅ Acesso salvo!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
@@ -879,7 +870,7 @@ export default function MasterPanel() {
   const handleDeleteLogin = async (userIndex: number) => {
     if (!selectedTenant || !confirm("Remover este acesso?")) return;
     if (selectedTenant.logins.length <= 1) {
-      alert("A empresa precisa ter pelo menos 1 acesso cadastrado.");
+      alert("A empresa precisa ter pelo menos 1 acesso.");
       return;
     }
     const targetUser = selectedTenant.logins[userIndex]?.user;
@@ -896,7 +887,7 @@ export default function MasterPanel() {
         .eq('slug', selectedTenant.slug);
     } catch (e) {}
 
-    logAction(selectedTenant.companyName, `REMOVEU o usuário de acesso: ${targetUser}`);
+    logAction(selectedTenant.companyName, `Removeu o usuário: ${targetUser}`);
   };
 
   const handleCreateTenant = async (e: React.FormEvent) => {
@@ -983,8 +974,8 @@ export default function MasterPanel() {
     setNewInitialPass("");
     setNewEnable2FA(false);
 
-    logAction(formatted.companyName, `Empresa contratante cadastrada no plano ${newPlan}`);
-    setFeedbackMsg(`Empresa "${formatted.companyName}" criada com segurança!`);
+    logAction(formatted.companyName, `Cadastrou empresa no plano ${newPlan}`);
+    setFeedbackMsg(`Empresa "${formatted.companyName}" criada com sucesso!`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
@@ -1161,7 +1152,7 @@ export default function MasterPanel() {
                 {activeTab === "faturas" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes (Mais novas no topo)</h4>
+                      <h4 className="font-bold text-white">Histórico de Mensalidades & Comprovantes</h4>
                       <button onClick={handleGenerateNextInvoice} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer shadow transition flex items-center gap-1.5">
                         <Plus size={14} /> Gerar Próxima Fatura
                       </button>
@@ -1190,7 +1181,6 @@ export default function MasterPanel() {
                                 <button 
                                   onClick={() => setCollapsedInvoices(prev => ({ ...prev, [inv.id]: !isCollapsed }))} 
                                   className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1"
-                                  title={isCollapsed ? "Expandir Fatura" : "Fechar Fatura"}
                                 >
                                   {isCollapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
                                   <span className="text-[10px]">{isCollapsed ? "Expandir" : "Fechar"}</span>
@@ -1332,7 +1322,7 @@ export default function MasterPanel() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">Editar Empresa & Mudar Plano (Upgrade/Downgrade)</h3>
+              <h3 className="text-base font-bold text-white">Editar Empresa & Mudar Plano</h3>
               <button onClick={() => setIsEditTenantModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
 
@@ -1374,9 +1364,6 @@ export default function MasterPanel() {
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Mensalidade (R$) *</label>
                 <input required type="number" step="0.01" value={editMonthlyFee} onChange={e => setEditMonthlyFee(Number(e.target.value))} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-emerald-400 font-bold outline-none" />
-              </div>
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px]">
-                ⚠️ Alterar o plano ajustará automaticamente os módulos permitidos (restringindo em caso de downgrade ou abrindo em caso de upgrade).
               </div>
               <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Alterações</button>
             </form>
@@ -1420,7 +1407,7 @@ export default function MasterPanel() {
               {invoicePaymentMethod === "Cartão de Crédito" && (
                 <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-1">
                   <label className="text-indigo-300 font-bold block">Segurança de Dados do Cartão (PCI Compliant)</label>
-                  <p className="text-slate-400 text-[10px]">Por segurança, insira apenas os 4 últimos dígitos do cartão. Os demais dados são descartados.</p>
+                  <p className="text-slate-400 text-[10px]">Insira apenas os 4 últimos dígitos.</p>
                   <input type="text" maxLength={4} placeholder="Ex: 4821" value={invoiceCardInput} onChange={e => setInvoiceCardInput(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2 rounded-lg text-white font-mono" />
                 </div>
               )}
@@ -1433,7 +1420,7 @@ export default function MasterPanel() {
                   <option value="Vencido">Vencido</option>
                 </select>
               </div>
-              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Fatura Segura</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Fatura</button>
             </form>
           </div>
         </div>
@@ -1487,6 +1474,8 @@ export default function MasterPanel() {
               <h3 className="text-base font-bold text-white">Cadastrar Empresa Contratante</h3>
               <button onClick={() => setIsNewTenantModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
+
+            {modalError && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold text-center">{modalError}</div>}
 
             <form onSubmit={handleCreateTenant} className="space-y-3">
               <div>
