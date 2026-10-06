@@ -1007,7 +1007,7 @@ export default function Home() {
               <p className="text-xs text-slate-400">
                 O seu plano atual não inclui o acesso a este módulo ou ele foi desativado pela administração. Faça um upgrade para o Plano Pro ou Ultra para desbloquear este recurso instantaneamente!
               </p>
-              <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
+              <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
                 ✨ Fazer Upgrade de Plano
               </button>
             </div>
@@ -1568,7 +1568,7 @@ export default function Home() {
                       </div>
                       <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra</h3>
                       <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Faça upgrade para o Plano Ultra!</p>
-                      <button onClick={() => setActiveTab("my_plan")} className="bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow">
+                      <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
                         ✨ Conhecer o Plano Ultra
                       </button>
                     </div>

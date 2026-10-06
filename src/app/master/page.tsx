@@ -581,51 +581,52 @@ export default function MasterPanel() {
   };
 
   const handleSaveTenantEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTenant) return;
+  e.preventDefault();
+  if (!selectedTenant) return;
 
-    const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
-    const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
+  // Pega automaticamente os módulos padrão do novo plano escolhido
+  const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
+  const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
 
-    const updatedList = tenants.map(t => {
-      if (t.id === selectedTenant.id) {
-        return {
-          ...t,
-          companyName: editCompanyName,
-          ownerName: editOwnerName,
-          ownerEmail: editOwnerEmail,
-          ownerPhone: editOwnerPhone,
-          monthlyFee: Number(editMonthlyFee || newFeeVal),
-          planName: editPlanName,
-          allowedModules: newAllowedMods
-        };
-      }
-      return t;
-    });
+  const updatedList = tenants.map(t => {
+    if (t.id === selectedTenant.id) {
+      return {
+        ...t,
+        companyName: editCompanyName,
+        ownerName: editOwnerName,
+        ownerEmail: editOwnerEmail,
+        ownerPhone: editOwnerPhone,
+        monthlyFee: Number(editMonthlyFee || newFeeVal),
+        planName: editPlanName,
+        allowedModules: newAllowedMods // Atualiza os módulos instantaneamente
+      };
+    }
+    return t;
+  });
 
-    setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+  setTenants(updatedList);
+  localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
 
-    try {
-      await supabase
-        .from('tenants')
-        .update({
-          company_name: editCompanyName,
-          owner_name: editOwnerName,
-          owner_email: editOwnerEmail,
-          owner_phone: editOwnerPhone,
-          monthly_fee: Number(editMonthlyFee || newFeeVal),
-          plan_name: editPlanName,
-          allowed_modules: newAllowedMods
-        })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+  try {
+    await supabase
+      .from('tenants')
+      .update({
+        company_name: editCompanyName,
+        owner_name: editOwnerName,
+        owner_email: editOwnerEmail,
+        owner_phone: editOwnerPhone,
+        monthly_fee: Number(editMonthlyFee || newFeeVal),
+        plan_name: editPlanName,
+        allowed_modules: newAllowedMods // Salva na nuvem os novos módulos liberados
+      })
+      .eq('slug', selectedTenant.slug);
+  } catch (e) {}
 
-    logAction(editCompanyName, `Atualizou plano para ${editPlanName} e aplicou restrições de módulos`);
-    setIsEditTenantModalOpen(false);
-    setFeedbackMsg(`✅ Empresa atualizada para o plano ${editPlanName}!`);
-    setTimeout(() => setFeedbackMsg(""), 3000);
-  };
+  logAction(editCompanyName, `Atualizou plano para ${editPlanName} e liberou módulos automaticamente`);
+  setIsEditTenantModalOpen(false);
+  setFeedbackMsg(`✅ Empresa atualizada para o plano ${editPlanName} com módulos liberados!`);
+  setTimeout(() => setFeedbackMsg(""), 3000);
+};
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
