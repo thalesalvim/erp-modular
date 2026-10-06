@@ -552,11 +552,12 @@ export default function Home() {
     localStorage.removeItem("master_bypass_slug");
     localStorage.removeItem("master_bypass_login_name");
     localStorage.removeItem("master_bypass_login_role");
-    setIsLogged(false);
-    if (isMasterBypassActive) {
-      window.location.href = "/master";
-    } else {
-      window.location.href = "/";
+    
+    setIsLogged(false); // Força a atualização do ecrã para mostrar o login
+    
+    // Força o redirecionamento limpo da página
+    if (typeof window !== "undefined") {
+      window.location.href = window.location.pathname;
     }
   };
 
