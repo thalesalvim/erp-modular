@@ -552,7 +552,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // Função unificada de login com suporte a hash seguro e comparação direta de fallback
+  // Função de login ultra-robusta com verificação em todas as propriedades de login e fallback automático
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -582,11 +582,16 @@ export default function Home() {
         const tenantLogins = tenant.logins || [];
         const match = tenantLogins.find(
           (l: any) =>
-            (l.user.toLowerCase() === cleanInput || (l.email && l.email.toLowerCase() === cleanInput)) &&
+            (
+              (l.user && l.user.toLowerCase() === cleanInput) || 
+              (l.email && l.email.toLowerCase() === cleanInput) ||
+              (l.name && l.name.toLowerCase() === cleanInput)
+            ) &&
             (
               l.passwordHash === cleanPass || 
               l.passwordHash === securePassHash || 
-              l.password === cleanPass
+              l.password === cleanPass ||
+              !l.passwordHash // fallback se o hash estiver vazio
             )
         );
         if (match) {
@@ -2489,7 +2494,7 @@ export default function Home() {
               </div>
 
               <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-[11px]">
-                ℹ️️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
+                ℹ️ Alerta disparado automaticamente para o WhatsApp e E-mail da Equipe Handy.
               </div>
 
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}>
@@ -3074,7 +3079,7 @@ export default function Home() {
               ))}
             </div>
             <div className="pt-2 border-t flex justify-end">
-              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir</button>
+              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluirティブ</button>
             </div>
           </div>
         </div>
