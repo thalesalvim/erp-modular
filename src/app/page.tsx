@@ -51,7 +51,10 @@ import {
   BarChart3,
   Percent,
   DollarSign,
-  ArrowLeft
+  ArrowLeft,
+  KeyRound,
+  Mail,
+  Smartphone
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
@@ -115,6 +118,7 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
+
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
   const [isMasterBypassActive, setIsMasterBypassActive] = useState(false);
@@ -128,6 +132,18 @@ export default function Home() {
   const [rememberCredentials, setRememberCredentials] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+
+  // Estados do Fluxo de Recuperação de Senha ("Esqueci a senha")
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"identifier" | "method" | "code" | "newpass">("identifier");
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotTargetUser, setForgotTargetUser] = useState<any | null>(null);
+  const [forgotMethod, setForgotMethod] = useState<"email" | "sms">("email");
+  const [forgotInputCode, setForgotInputCode] = useState("");
+  const [generatedCode, setGeneratedCode] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -546,11 +562,11 @@ export default function Home() {
     
     setIsLogged(false);
     
-    // Redirecionamento forçado e limpo para a raiz
     if (typeof window !== "undefined") {
       window.location.href = "/";
     }
   };
+
   const stockSummary = useMemo(() => {
     return products.map(prod => {
       const entries = stockMoves.filter(m => m.productName === prod.name && m.type === "Entrada").reduce((a, b) => a + b.quantity, 0);
@@ -884,9 +900,10 @@ export default function Home() {
     return true;
   });
 
+  // TELA DE LOGIN COM MODAL DE "ESQUECI A SENHA" INTEGRADO
   if (!isLogged) {
     return (
-      <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4`}>
+      <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4 relative`}>
         <div className={`w-full max-w-md p-8 rounded-3xl border shadow-xl space-y-6 ${cardBgClass}`}>
           <div className="text-center space-y-2">
             <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 mb-1">
@@ -910,7 +927,22 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="font-bold block mb-1">Senha de Acesso</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="font-bold">Senha de Acesso</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsForgotModalOpen(true);
+                    setForgotStep("identifier");
+                    setForgotIdentifier("");
+                    setForgotError("");
+                    setForgotSuccess("");
+                  }}
+                  className="text-[11px] font-bold text-indigo-500 hover:underline cursor-pointer"
+                >
+                  Esqueci a senha?
+                </button>
+              </div>
               <input
                 type="password"
                 required
@@ -956,6 +988,267 @@ export default function Home() {
             <span className="text-[11px] opacity-60">HandyHub Gestão Empresarial • Segurança Garantida</span>
           </div>
         </div>
+
+        {/* MODAL DE RECUPERAÇÃO DE SENHA ("ESQUECI A SENHA") */}
+        {isForgotModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className={`w-full max-w-md p-6 rounded-3xl border shadow-2xl space-y-4 text-xs ${cardBgClass}`}>
+              <div className="border-b pb-3 flex justify-between items-center">
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <KeyRound size={16} className="text-indigo-500" />
+                  <span>Recuperação de Palavra-Passe</span>
+                </h3>
+                <button
+                  onClick={() => setIsForgotModalOpen(false)}
+                  className="text-slate-400 font-bold text-base cursor-pointer hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* PASSO 1: Informar E-mail ou Usuário */}
+              {forgotStep === "identifier" && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setForgotError("");
+                    try {
+                      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
+                      if (error || !savedTenants) {
+                        setForgotError("Erro ao consultar base de dados.");
+                        return;
+                      }
+
+                      let foundUser = null;
+                      let foundTenant = null;
+                      const cleanQuery = forgotIdentifier.trim().toLowerCase();
+
+                      for (const t of savedTenants) {
+                        const logins = t.logins || [];
+                        const m = logins.find((l: any) => l.user?.toLowerCase() === cleanQuery || l.email?.toLowerCase() === cleanQuery);
+                        if (m) {
+                          foundUser = m;
+                          foundTenant = t;
+                          break;
+                        }
+                      }
+
+                      if (foundUser && foundTenant) {
+                        setForgotTargetUser({ ...foundUser, tenantSlug: foundTenant.slug, tenantLogins: foundTenant.logins });
+                        setForgotStep("method");
+                      } else {
+                        setForgotError("Nenhum usuário ou e-mail encontrado com este dado.");
+                      }
+                    } catch (err) {
+                      setForgotError("Erro na conexão com a nuvem.");
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <p className="opacity-70">Insira o seu e-mail cadastrado ou nome de usuário para localizar a conta:</p>
+                  <div>
+                    <label className="font-bold block mb-1">E-mail ou Usuário *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ex: gisele@gmail.com"
+                      value={forgotIdentifier}
+                      onChange={e => setForgotIdentifier(e.target.value)}
+                      className={`w-full border p-3 rounded-xl outline-none ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                    />
+                  </div>
+
+                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotModalOpen(false)}
+                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                    >
+                      Avançar →
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* PASSO 2: Escolher Canal de Envio (E-mail ou Telemóvel/SMS) */}
+              {forgotStep === "method" && (
+                <div className="space-y-4">
+                  <p className="opacity-70">
+                    Conta encontrada: <strong>{forgotTargetUser?.name}</strong> ({forgotTargetUser?.email || forgotTargetUser?.user})
+                  </p>
+                  <p className="font-bold">Escolha como deseja receber o código de verificação:</p>
+
+                  <div className="space-y-2">
+                    <div
+                      onClick={() => setForgotMethod("email")}
+                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "email" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800"}`}
+                    >
+                      <Mail size={18} className="text-indigo-400" />
+                      <div>
+                        <strong className="block">Enviar por E-mail</strong>
+                        <span className="text-[10px] opacity-60">Código enviado para {forgotTargetUser?.email || "o e-mail cadastrado"}</span>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setForgotMethod("sms")}
+                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "sms" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800"}`}
+                    >
+                      <Smartphone size={18} className="text-indigo-400" />
+                      <div>
+                        <strong className="block">Enviar por SMS / WhatsApp</strong>
+                        <span className="text-[10px] opacity-60">Código enviado para o telemóvel cadastrado</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep("identifier")}
+                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
+                    >
+                      ← Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const code = Math.floor(100000 + Math.random() * 900000).toString();
+                        setGeneratedCode(code);
+                        // Simula o disparo real do código
+                        alert(`📲 [Simulação de Envio]\n\nCódigo de recuperação de 6 dígitos gerado: ${code}\nEnviado com sucesso via ${forgotMethod.toUpperCase()} para o usuário ${forgotTargetUser?.name}.`);
+                        setForgotStep("code");
+                      }}
+                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                    >
+                      Enviar Código ➔
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* PASSO 3: Inserir o Código de Verificação */}
+              {forgotStep === "code" && (
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    setForgotError("");
+                    if (forgotInputCode.trim() === generatedCode) {
+                      setForgotStep("newpass");
+                    } else {
+                      setForgotError("Código incorreto. Verifique os dígitos informados.");
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <p className="opacity-70">
+                    Digite o código de verificação de 6 dígitos enviado para o seu {forgotMethod === "email" ? "e-mail" : "telemóvel"}:
+                  </p>
+                  <div>
+                    <label className="font-bold block mb-1">Código de 6 Dígitos *</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      placeholder="123456"
+                      value={forgotInputCode}
+                      onChange={e => setForgotInputCode(e.target.value)}
+                      className={`w-full border p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                    />
+                    <span className="text-[10px] opacity-50 block mt-1">Dica de teste: O código gerado apareceu no alerta anterior.</span>
+                  </div>
+
+                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep("method")}
+                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
+                    >
+                      ← Voltar
+                    </button>
+                    <button
+                      type="submit"
+                      className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                    >
+                      Validar Código
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* PASSO 4: Criar Nova Palavra-Passe */}
+              {forgotStep === "newpass" && (
+                <form
+                  onSubmit={async e => {
+                    e.preventDefault();
+                    setForgotError("");
+                    try {
+                      const newHash = hashPassword(newPasswordInput.trim());
+                      const updatedLogins = forgotTargetUser.tenantLogins.map((l: any) => {
+                        if (l.user === forgotTargetUser.user || l.email === forgotTargetUser.email) {
+                          return { ...l, passwordHash: newHash };
+                        }
+                        return l;
+                      });
+
+                      const { error } = await supabase
+                        .from('tenants')
+                        .update({ logins: updatedLogins })
+                        .eq('slug', forgotTargetUser.tenantSlug);
+
+                      if (error) {
+                        setForgotError("Erro ao salvar nova senha na nuvem.");
+                        return;
+                      }
+
+                      setForgotSuccess("🎉 Palavra-passe redefinida com sucesso!");
+                      setTimeout(() => {
+                        setIsForgotModalOpen(false);
+                        setForgotSuccess("");
+                      }, 2500);
+                    } catch (err) {
+                      setForgotError("Erro ao atualizar credenciais.");
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <p className="opacity-70">Identidade confirmada! Crie uma nova palavra-passe segura para a sua conta:</p>
+                  <div>
+                    <label className="font-bold block mb-1">Nova Palavra-Passe *</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Mínimo 6 caracteres"
+                      value={newPasswordInput}
+                      onChange={e => setNewPasswordInput(e.target.value)}
+                      className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+                    />
+                  </div>
+
+                  {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
+                  {forgotSuccess && <div className="p-3 bg-emerald-500/20 text-emerald-400 font-bold rounded-xl text-center">{forgotSuccess}</div>}
+
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
+                  >
+                    💾 Salvar Nova Palavra-Passe
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
