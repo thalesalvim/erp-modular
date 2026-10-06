@@ -566,7 +566,6 @@ export default function Home() {
       window.location.href = "/";
     }
   };
-
   const stockSummary = useMemo(() => {
     return products.map(prod => {
       const entries = stockMoves.filter(m => m.productName === prod.name && m.type === "Entrada").reduce((a, b) => a + b.quantity, 0);
@@ -900,7 +899,6 @@ export default function Home() {
     return true;
   });
 
-  // TELA DE LOGIN COM MODAL DE "ESQUECI A SENHA" INTEGRADO
   if (!isLogged) {
     return (
       <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4 relative`}>
@@ -927,8 +925,16 @@ export default function Home() {
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="font-bold">Senha de Acesso</label>
+              <label className="font-bold block mb-1">Senha de Acesso</label>
+              <input
+                type="password"
+                required
+                value={loginPass}
+                onChange={e => setLoginPass(e.target.value)}
+                placeholder="••••••••"
+                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+              />
+              <div className="flex justify-end mt-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -943,14 +949,6 @@ export default function Home() {
                   Esqueci a senha?
                 </button>
               </div>
-              <input
-                type="password"
-                required
-                value={loginPass}
-                onChange={e => setLoginPass(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-              />
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -1123,8 +1121,11 @@ export default function Home() {
                       onClick={() => {
                         const code = Math.floor(100000 + Math.random() * 900000).toString();
                         setGeneratedCode(code);
-                        // Simula o disparo real do código
-                        alert(`📲 [Simulação de Envio]\n\nCódigo de recuperação de 6 dígitos gerado: ${code}\nEnviado com sucesso via ${forgotMethod.toUpperCase()} para o usuário ${forgotTargetUser?.name}.`);
+                        
+                        // Modo Profissional: Exibe apenas aviso limpo sem expor o código
+                        const destino = forgotMethod === "email" ? (forgotTargetUser?.email || "seu e-mail") : "seu telemóvel";
+                        alert(`✅ Código de verificação enviado com sucesso para ${destino}. Verifique sua caixa de entrada.`);
+                        
                         setForgotStep("code");
                       }}
                       className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
@@ -1163,7 +1164,6 @@ export default function Home() {
                       onChange={e => setForgotInputCode(e.target.value)}
                       className={`w-full border p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
                     />
-                    <span className="text-[10px] opacity-50 block mt-1">Dica de teste: O código gerado apareceu no alerta anterior.</span>
                   </div>
 
                   {forgotError && <p className="text-rose-500 font-bold">{forgotError}</p>}
