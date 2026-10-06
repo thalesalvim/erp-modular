@@ -115,7 +115,6 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   
-  // SEGURANÇA: Só considera logado se houver sessão ativa VÁLIDA
   const [isLogged, setIsLogged] = useState(false);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
@@ -253,7 +252,6 @@ export default function Home() {
 
         loadTenantData(normalizedFound.slug);
 
-        // O bypass do master só funciona se houver token válido na URL gerada pelo master
         if (masterBypassParam && masterBypassParam === storedBypass && storedBypass) {
           setIsMasterBypassActive(true);
           setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gisele Alvim");
@@ -263,12 +261,10 @@ export default function Home() {
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado");
         } else {
-          // Caso contrário, EXIGE que o usuário faça o login manualmente
           const savedSession = localStorage.getItem("saas_active_session");
           if (savedSession) {
             try {
               const sessionData = JSON.parse(savedSession);
-              // Verifica se a sessão salva pertence exatamente a este tenant atual
               if (sessionData && sessionData.slug === normalizedFound.slug) {
                 setActiveUserName(sessionData.name);
                 setActiveUserRole(sessionData.role);
@@ -512,7 +508,6 @@ export default function Home() {
         setActiveUserRole(matchedRole);
         setActiveUserEmail(matchedEmail);
 
-        // Salva a sessão amarrada ao slug do tenant para garantir segurança
         localStorage.setItem("saas_active_session", JSON.stringify({
           slug: normalizedAuth.slug,
           name: matchedName,
@@ -580,6 +575,7 @@ export default function Home() {
 
   const roleNorm = activeUserRole.toLowerCase();
   const isManager = roleNorm.includes("dono") || roleNorm.includes("gestor") || roleNorm.includes("gerente") || roleNorm.includes("administrador");
+  const isDono = roleNorm.includes("dono") || roleNorm.includes("administrador");
 
   const hasDREAccess = useMemo(() => {
     if (!currentCompany) return false;
@@ -589,8 +585,11 @@ export default function Home() {
 
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
-    if (tabId === "settings" || tabId === "my_plan" || tabId === "my_schedule") {
+    if (tabId === "settings" || tabId === "my_schedule") {
       return true;
+    }
+    if (tabId === "my_plan") {
+      return isDono; // Apenas o dono pode ver planos e faturas
     }
 
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
@@ -852,6 +851,7 @@ export default function Home() {
     return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
   }, [isManager, employees, activeUserName]);
 
+  // ABAS DO MENU (DRE e PLANO EXCLUSIVOS CONFORME PERMISSÕES)
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
     { id: "calendar", label: "Agenda de Horários", icon: <CalendarIcon size={17} /> },
@@ -865,14 +865,14 @@ export default function Home() {
     { id: "customers", label: "Base de Clientes", icon: <UsersIcon size={17} /> },
     { id: "my_schedule", label: "Meu Banco de Horas & Funções", icon: <Clock size={17} /> },
     { id: "dre", label: "Módulo DRE Gerencial", icon: <PieChart size={17} /> },
-    { id: "my_plan", label: "Meu Plano & Consultorias", icon: <Award size={17} /> },
+    ...(isDono ? [{ id: "my_plan", label: "Meu Plano & Consultorias", icon: <Award size={17} /> }] : []), // Exclusivo do Dono
     { id: "settings", label: "Configurações", icon: <SettingsIcon size={17} /> }
   ];
 
   const visibleTabs = allTabs.filter(tab => {
     if (!currentCompany) return true;
     if (tab.id === "my_schedule") return !isManager;
-    if (tab.id === "my_plan") return isManager;
+    if (tab.id === "my_plan") return isDono; // Apenas Dono visualiza no menu lateral
     if (tab.id === "settings") return true;
     if (tab.id === "dre") return true;
 
@@ -886,83 +886,6 @@ export default function Home() {
 
     return true;
   });
-
-  // SE NÃO ESTIVER LOGADO, EXIBE O ECRÃ DE LOGIN OBRIGATÓRIO (SEGURANÇA MÁXIMA)
-  if (!isLogged) {
-    return (
-      <div className={`flex h-screen items-center justify-center font-sans ${bgClass} p-4`}>
-        <div className={`w-full max-w-md p-8 rounded-3xl border shadow-xl space-y-6 ${cardBgClass}`}>
-          <div className="text-center space-y-2">
-            <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 mb-1">
-              <ShieldCheck size={32} />
-            </div>
-            <h1 className="text-xl font-black">Acesso Restrito ao Sistema</h1>
-            <p className="text-xs opacity-70">Identifique-se com suas credenciais para acessar o painel da unidade.</p>
-          </div>
-
-          <form onSubmit={handleClientLogin} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold block mb-1">Usuário ou E-mail</label>
-              <input
-                type="text"
-                required
-                value={loginUser}
-                onChange={e => setLoginUser(e.target.value)}
-                placeholder="seu.usuario"
-                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-              />
-            </div>
-
-            <div>
-              <label className="font-bold block mb-1">Senha de Acesso</label>
-              <input
-                type="password"
-                required
-                value={loginPass}
-                onChange={e => setLoginPass(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full border p-3 rounded-xl outline-none font-medium ${darkMode ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="remember"
-                checked={rememberCredentials}
-                onChange={e => setRememberCredentials(e.target.checked)}
-                className="rounded cursor-pointer"
-              />
-              <label htmlFor="remember" className="cursor-pointer select-none opacity-80">Lembrar credenciais neste computador</label>
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-xl font-bold text-center">
-                {loginError}
-              </div>
-            )}
-
-            {isTenantBlocked && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl font-bold text-center">
-                Estabelecimento Bloqueado por Inadimplência ou Contrato Suspenso.
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className={`w-full ${theme.buttonBg} text-white font-bold py-3.5 rounded-xl cursor-pointer shadow transition uppercase tracking-wider`}
-            >
-              Entrar no Sistema
-            </button>
-          </form>
-
-          <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] opacity-60">HandyHub Gestão Empresarial • Segurança Garantida</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative`}>
@@ -1073,12 +996,12 @@ export default function Home() {
               <div className="inline-flex p-4 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
                 <Lock size={36} />
               </div>
-              <h3 className="text-lg font-black text-white">Módulo Bloqueado no Plano Atual</h3>
+              <h3 className="text-lg font-black text-white">Módulo Bloqueado ou Restrito</h3>
               <p className="text-xs text-slate-400">
-                O seu plano atual não inclui o acesso a este módulo ou ele foi desativado pela administração. Faça um upgrade para o Plano Pro ou Ultra para desbloquear este recurso instantaneamente!
+                O seu plano atual não inclui o acesso a este módulo ou este painel é exclusivo para o Dono do estabelecimento.
               </p>
-              <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
-                ✨ Fazer Upgrade de Plano
+              <button onClick={() => setActiveTab("dashboard")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
+                ← Voltar ao Dashboard
               </button>
             </div>
           ) : (
@@ -1646,7 +1569,7 @@ export default function Home() {
                 </div>
               )}
 
-              {activeTab === "my_plan" && isManager && (
+              {activeTab === "my_plan" && isDono && (
                 <div className={`max-w-6xl mx-auto p-6 rounded-2xl border shadow-sm space-y-6 text-xs font-sans ${cardBgClass}`}>
                   <div className="border-b pb-4 flex justify-between items-center">
                     <div>
@@ -2165,7 +2088,7 @@ export default function Home() {
               setNewRoleName("");
             }} className="flex gap-2 pt-2 border-t">
               <input placeholder="Nova função (ex: Barbeiro)" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1 border p-2.5 rounded-xl outline-none" />
-              <button type="submit" className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer">+ Adicionar</button>
+              <button type="submit" className={`bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer`}>+ Adicionar</button>
             </form>
           </div>
         </div>
