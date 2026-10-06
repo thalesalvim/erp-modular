@@ -62,29 +62,9 @@ import {
 import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
 
-function hashPassword(pass: string): string {
-  if (!pass) return "";
-  const clean = String(pass).trim();
-  try {
-    let hash = 0;
-    const salt = "HandyHub_Secured_2026_@v9!_Hardened";
-    const saltedPass = clean + salt;
-    for (let i = 0; i < saltedPass.length; i++) {
-      const char = saltedPass.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return "sec_v3_" + Math.abs(hash).toString(36);
-  } catch (e) {
-    return "sec_fallback_" + clean;
-  }
-}
-
 function sanitizeInput(input: string): string {
   if (typeof input !== "string") return "";
-  return input
-    .replace(/[<>]/g, "")
-    .trim();
+  return input.replace(/[<>]/g, "").trim();
 }
 
 function validatePasswordStrength(pass: string): string | null {
@@ -172,7 +152,7 @@ export default function Home() {
 
   const [darkMode, setDarkMode] = useState(false);
 
-  // Estados para o modal discreto de alteração de senha
+  // Estados para alteração de senha segura via Supabase Auth
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
@@ -437,7 +417,7 @@ export default function Home() {
           owner_name: "Gisele Alvim",
           owner_email: "gisele@gmail.com",
           logins: [
-            { user: "gisele", email: "gisele@gmail.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gisele Alvim" }
+            { user: "gisele", email: "gisele@gmail.com", role: "Gestor", name: "Gisele Alvim" }
           ]
         };
       }
@@ -458,7 +438,6 @@ export default function Home() {
         if (normalizedFound.status === "Bloqueado") {
           setIsTenantBlocked(true);
           setIsLogged(false);
-          localStorage.removeItem("saas_active_session");
           return;
         }
 
@@ -473,28 +452,21 @@ export default function Home() {
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado com Segurança");
         } else {
-          const savedSession = localStorage.getItem("saas_active_session");
-          if (savedSession) {
-            try {
-              const sessionData = JSON.parse(savedSession);
-              if (sessionData && sessionData.slug === normalizedFound.slug) {
-                const validTenantLogin = normalizedFound.logins?.some(
-                  (l: any) => l.email === sessionData.email || l.user === sessionData.email || l.name === sessionData.name
-                );
-                if (validTenantLogin) {
-                  setActiveUserName(sessionData.name);
-                  setActiveUserRole(sessionData.role);
-                  setActiveUserEmail(sessionData.email);
-                  setIsLogged(true);
-                } else {
-                  setIsLogged(false);
-                  localStorage.removeItem("saas_active_session");
-                }
-              } else {
-                setIsLogged(false);
-              }
-            } catch (e) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user) {
+            const authEmail = session.user.email;
+            const matchedLogin = normalizedFound.logins?.find(
+              (l: any) => (l.email || "").toLowerCase() === (authEmail || "").toLowerCase() || (l.user || "").toLowerCase() === (authEmail || "").toLowerCase()
+            );
+
+            if (matchedLogin) {
+              setActiveUserName(matchedLogin.name || "Gestor");
+              setActiveUserRole(matchedLogin.role || "Gestor");
+              setActiveUserEmail(authEmail || "");
+              setIsLogged(true);
+            } else {
               setIsLogged(false);
+              await supabase.auth.signOut();
             }
           } else {
             setIsLogged(false);
@@ -581,6 +553,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
+  // LOGIN BLINDADO COM SUPABASE AUTH NATIVO (SERVER-SIDE HASH & TOKENS SEGUROS)
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -595,103 +568,70 @@ export default function Home() {
     try {
       const cleanInput = sanitizeInput(loginUser.toLowerCase());
       const cleanPass = sanitizeInput(loginPass);
-      const securePassHash = hashPassword(cleanPass);
 
-      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      if (error || !savedTenants || savedTenants.length === 0) {
+      const { data: savedTenants, error: tenantErr } = await supabase.from('tenants').select('*');
+      if (tenantErr || !savedTenants) {
         setLoginError("Erro de comunicação com o servidor seguro.");
         return;
       }
 
+      let targetEmail = cleanInput;
       let authCompany = null;
       let matchedRole = "Gestor";
       let matchedName = "Usuário";
-      let matchedEmail = "";
 
-      for (const tenant of savedTenants) {
-        if (!tenant || tenant.status === "Bloqueado") continue;
-        const tenantLogins = tenant.logins || [];
-        
-        const match = tenantLogins.find(
-          (l: any) =>
-            (
-              (l.user && l.user.toLowerCase() === cleanInput) || 
-              (l.email && l.email.toLowerCase() === cleanInput) ||
-              (l.name && l.name.toLowerCase() === cleanInput)
-            ) &&
-            (
-              l.passwordHash === securePassHash || 
-              l.passwordHash === cleanPass || 
-              l.password === cleanPass ||
-              !l.passwordHash
-            )
+      for (const t of savedTenants) {
+        if (!t || t.status === "Bloqueado") continue;
+        const logins = t.logins || [];
+        const foundMatch = logins.find(
+          (l: any) => (l.user || "").toLowerCase() === cleanInput || (l.email || "").toLowerCase() === cleanInput || (l.name || "").toLowerCase() === cleanInput
         );
-
-        if (match) {
-          authCompany = tenant;
-          matchedRole = match.role || "Gestor";
-          matchedName = match.name || tenant.owner_name || "Usuário";
-          matchedEmail = match.email || match.user || cleanInput;
+        if (foundMatch) {
+          authCompany = t;
+          targetEmail = foundMatch.email || (foundMatch.user.includes("@") ? foundMatch.user : `${foundMatch.user}@handyhub.com`);
+          matchedRole = foundMatch.role || "Gestor";
+          matchedName = foundMatch.name || t.owner_name || "Usuário";
           break;
         }
       }
 
-      if (authCompany) {
-        setLoginAttempts(0);
+      if (!authCompany) {
+        setLoginError("Credenciais inválidas.");
+        return;
+      }
 
-        if (rememberCredentials) {
-          localStorage.setItem("machine_remember_creds", "true");
-          localStorage.setItem("machine_saved_user", cleanInput);
-        } else {
-          localStorage.removeItem("machine_remember_creds");
-          localStorage.removeItem("machine_saved_user");
-        }
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: cleanPass
+      });
 
-        const normalizedAuth = {
-          ...authCompany,
-          companyName: authCompany.company_name || authCompany.companyName,
-          planName: authCompany.plan_name || authCompany.planName,
-          allowedModules: authCompany.allowed_modules || authCompany.allowedModules || {},
-          moduleRoles: authCompany.module_roles || authCompany.moduleRoles || {}
-        };
-
-        setCurrentCompany(normalizedAuth);
-        setActiveUserName(matchedName);
-        setActiveUserRole(matchedRole);
-        setActiveUserEmail(matchedEmail);
-
-        localStorage.setItem("saas_active_session", JSON.stringify({
-          slug: normalizedAuth.slug,
-          name: matchedName,
-          role: matchedRole,
-          email: matchedEmail
-        }));
-        localStorage.setItem("saas_last_active_slug", normalizedAuth.slug);
-
-        setSalonConfig(prev => ({ ...prev, name: normalizedAuth.companyName }));
-        await loadTenantData(normalizedAuth.slug);
-        setIsLogged(true);
-
-        recordSystemLog(`Autenticação segura realizada com sucesso (${matchedRole})`);
-
-        const rNorm = matchedRole.toLowerCase();
-        if (rNorm.includes("colaborador")) {
-          setActiveTab("calendar");
-        } else {
-          setActiveTab("dashboard");
-        }
-
-      } else {
+      if (authError || !authData.session) {
         const nextAttempts = loginAttempts + 1;
         setLoginAttempts(nextAttempts);
-        
         if (nextAttempts >= 4) {
-          const lockoutDuration = Math.min(30000 * Math.pow(2, nextAttempts - 4), 300000);
-          setLockoutUntil(Date.now() + lockoutDuration);
-          setLoginError(`Muitas falhas consecutivas. Sistema bloqueado por segurança.`);
+          setLockoutUntil(Date.now() + 300000);
+          setLoginError("Muitas falhas consecutivas. Sistema bloqueado por segurança.");
         } else {
           setLoginError(`Credenciais inválidas. Tentativa ${nextAttempts}/4.`);
         }
+        return;
+      }
+
+      setLoginAttempts(0);
+      setCurrentCompany(authCompany);
+      setActiveUserName(matchedName);
+      setActiveUserRole(matchedRole);
+      setActiveUserEmail(targetEmail);
+      localStorage.setItem("saas_last_active_slug", authCompany.slug);
+
+      await loadTenantData(authCompany.slug);
+      setIsLogged(true);
+      recordSystemLog(`Autenticação nativa realizada com sucesso (${matchedRole})`);
+
+      if (matchedRole.toLowerCase().includes("colaborador")) {
+        setActiveTab("calendar");
+      } else {
+        setActiveTab("dashboard");
       }
     } catch (err) {
       console.error("Erro interno de autenticação:", err);
@@ -699,17 +639,15 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     recordSystemLog("Encerramento de sessão realizado");
-    localStorage.removeItem("saas_active_tenant");
-    localStorage.removeItem("saas_active_session");
+    await supabase.auth.signOut();
     localStorage.removeItem("master_bypass_auth");
     localStorage.removeItem("master_bypass_slug");
     localStorage.removeItem("master_bypass_login_name");
     localStorage.removeItem("master_bypass_login_role");
     
     setIsLogged(false);
-    
     if (typeof window !== "undefined") {
       window.location.href = "/";
     }
@@ -1280,24 +1218,7 @@ export default function Home() {
                     }
 
                     try {
-                      const newHash = hashPassword(newPasswordInput.trim());
-                      const updatedLogins = forgotTargetUser.tenantLogins.map((l: any) => {
-                        if (l.user === forgotTargetUser.user || l.email === forgotTargetUser.email) {
-                          return { ...l, passwordHash: newHash };
-                        }
-                        return l;
-                      });
-
-                      const { error } = await supabase
-                        .from('tenants')
-                        .update({ logins: updatedLogins })
-                        .eq('slug', forgotTargetUser.tenantSlug);
-
-                      if (error) {
-                        setForgotError("Erro ao salvar nova senha na nuvem.");
-                        return;
-                      }
-
+                      await supabase.auth.updateUser({ password: newPasswordInput.trim() });
                       setForgotSuccess("🎉 Palavra-passe redefinida com sucesso!");
                       setTimeout(() => {
                         setIsForgotModalOpen(false);
@@ -1394,6 +1315,11 @@ export default function Home() {
               <button
                 key={tab.id}
                 onClick={() => {
+                  if (tab.id === "dre" && !hasDREAccess) {
+                    setActiveTab("my_plan");
+                    setIsMobileMenuOpen(false);
+                    return;
+                  }
                   setActiveTab(tab.id);
                   setIsMobileMenuOpen(false);
                 }}
@@ -1401,8 +1327,9 @@ export default function Home() {
                   activeTab === tab.id ? `${theme.activeBg} text-white shadow-md` : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
-                {tab.icon}
+                {tab.id === "dre" && !hasDREAccess ? <Lock size={15} className="text-amber-400" /> : tab.icon}
                 <span>{tab.label}</span>
+                {tab.id === "dre" && !hasDREAccess && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">Ultra</span>}
               </button>
             ))}
           </nav>
@@ -1478,8 +1405,8 @@ export default function Home() {
               <p className="text-xs text-slate-400">
                 O seu plano atual não inclui o acesso a este módulo ou este painel é exclusivo para o Dono do estabelecimento.
               </p>
-              <button onClick={() => setActiveTab("dashboard")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
-                ← Voltar ao Dashboard
+              <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
+                ✨ Ver Planos & Fazer Upgrade
               </button>
             </div>
           ) : (
@@ -1674,9 +1601,12 @@ export default function Home() {
               {activeTab === "atendimentos" && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Atendimentos</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Atendimentos Realizados</h3>
+                      <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("attendance"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Lançar Atendimento</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {filteredAttendances.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum atendimento.</p> : filteredAttendances.map((a: any) => <div key={a.id} className="py-2.5 flex justify-between items-center"><div><strong>{a.clientName}</strong> - {a.serviceName} ({a.professionalName}) • <span className="font-bold">R$ {Number(a.netValue).toFixed(2)} ({a.paymentMethod})</span> {a.notes ? <span className="opacity-60 italic">[{a.notes}]</span> : ""}</div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(a.id); setFormDate(a.date); setTempTime(a.time || "10:00"); setFormClientName(a.clientName); setFormServiceName(a.serviceName); setFormProfessionalName(a.professionalName); setFormGrossValue(a.netValue); setFormPaymentMethod(a.paymentMethod || "Pix"); setFormNotes(a.notes || ""); setModalType("attendance"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir atendimento?")) return; recordSystemLog(`Excluiu atendimento de ${a.clientName}`); const updated = attendances.filter(item => item.id !== a.id); setAttendances(updated); saveTenantData("attendances", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {filteredAttendances.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum atendimento registrado.</p> : filteredAttendances.map((a: any) => <div key={a.id} className="py-2.5 flex justify-between items-center"><div><strong>{a.clientName}</strong> - {a.serviceName} ({a.professionalName}) • <span className="font-bold">R$ {Number(a.netValue).toFixed(2)} ({a.paymentMethod})</span> {a.notes ? <span className="opacity-60 italic">[{a.notes}]</span> : ""}</div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(a.id); setFormDate(a.date); setTempTime(a.time || "10:00"); setFormClientName(a.clientName); setFormServiceName(a.serviceName); setFormProfessionalName(a.professionalName); setFormGrossValue(a.netValue); setFormPaymentMethod(a.paymentMethod || "Pix"); setFormNotes(a.notes || ""); setModalType("attendance"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir atendimento?")) return; recordSystemLog(`Excluiu atendimento de ${a.clientName}`); const updated = attendances.filter(item => item.id !== a.id); setAttendances(updated); saveTenantData("attendances", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1685,9 +1615,12 @@ export default function Home() {
               {activeTab === "services" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Serviços & Preços</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Serviços & Preços</h3>
+                      <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Geral"); setFormDuration(30); setFormPrice(50); setServiceAssignedRole(rolesList[0] || "Profissional Principal"); setModalType("service"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Serviço</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {services.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum serviço.</p> : services.map(s => <div key={s.id} className="py-2.5 flex justify-between items-center"><div><strong>{s.name}</strong> ({s.duration} min) • Função: <span className="text-indigo-600 font-bold">{s.assignedRole || "Geral"}</span> • <span className="font-black text-pink-600">R$ {Number(s.price).toFixed(2)}</span></div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setFormName(s.name); setFormCategory(s.category || "Geral"); setFormDuration(s.duration || 30); setFormPrice(s.price); setServiceAssignedRole(s.assignedRole || rolesList[0] || "Profissional Principal"); setModalType("service"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Serviço"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir serviço?")) return; recordSystemLog(`Excluiu o serviço ${s.name}`); const updated = services.filter(item => item.id !== s.id); setServices(updated); saveTenantData("services", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {services.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum serviço cadastrado.</p> : services.map(s => <div key={s.id} className="py-2.5 flex justify-between items-center"><div><strong>{s.name}</strong> ({s.duration} min) • Função: <span className="text-indigo-600 font-bold">{s.assignedRole || "Geral"}</span> • <span className="font-black text-pink-600">R$ {Number(s.price).toFixed(2)}</span></div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setFormName(s.name); setFormCategory(s.category || "Geral"); setFormDuration(s.duration || 30); setFormPrice(s.price); setServiceAssignedRole(s.assignedRole || rolesList[0] || "Profissional Principal"); setModalType("service"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Serviço"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir serviço?")) return; recordSystemLog(`Excluiu o serviço ${s.name}`); const updated = services.filter(item => item.id !== s.id); setServices(updated); saveTenantData("services", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1696,9 +1629,12 @@ export default function Home() {
               {activeTab === "promotions" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Promoção</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Promoções & Descontos</h3>
+                      <button onClick={() => { setEditingId(null); setFormName(""); setPromoTargetItems([]); setPromoDuration("7 dias"); setPromoDiscount(1); setPromoIsAll(false); setModalType("promotion"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Cadastrar Promoção</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {promotions.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma promoção.</p> : promotions.map(p => <div key={p.id} className="py-2.5 flex justify-between items-center"><span>{p.title} • Itens: {p.isAllPromo ? "Tudo em Promoção" : (p.targetItems || []).join(", ")} • Validade: {p.duration} • Desconto: <strong className="text-pink-600">{p.discountPercent}%</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(p.id); setFormName(p.title); setPromoTargetItems(p.targetItems || []); setPromoDuration(p.duration); setPromoDiscount(p.discountPercent); setPromoIsAll(p.isAllPromo); setModalType("promotion"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Promoção"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir promoção?")) return; recordSystemLog(`Excluiu promoção ${p.title}`); const updated = promotions.filter(item => item.id !== p.id); setPromotions(updated); saveTenantData("promotions", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {promotions.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma promoção ativa.</p> : promotions.map(p => <div key={p.id} className="py-2.5 flex justify-between items-center"><span>{p.title} • Itens: {p.isAllPromo ? "Tudo em Promoção" : (p.targetItems || []).join(", ")} • Validade: {p.duration} • Desconto: <strong className="text-pink-600">{p.discountPercent}%</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(p.id); setFormName(p.title); setPromoTargetItems(p.targetItems || []); setPromoDuration(p.duration); setPromoDiscount(p.discountPercent); setPromoIsAll(p.isAllPromo); setModalType("promotion"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Promoção"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir promoção?")) return; recordSystemLog(`Excluiu promoção ${p.title}`); const updated = promotions.filter(item => item.id !== p.id); setPromotions(updated); saveTenantData("promotions", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1707,9 +1643,12 @@ export default function Home() {
               {activeTab === "pos" && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Vendas</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Vendas de Produtos</h3>
+                      <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("sale"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Nova Venda</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {filteredSales.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma venda.</p> : filteredSales.map((s: any) => <div key={s.id} className="py-2.5 flex justify-between items-center"><span>{s.productName} ({s.quantity} un) - {s.clientName} • Vendedor: <strong>{s.sellerName || "Geral"}</strong> • Pagamento: <strong>{s.paymentMethod}</strong> • <strong className="text-emerald-600">R$ {Number(s.total).toFixed(2)}</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setSaleProductName(s.productName); setSaleClientName(s.clientName); setSaleQuantity(s.quantity); setSaleUnitPrice(s.unitPrice); setSalePaymentMethod(s.paymentMethod || "Pix"); setModalType("sale"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Venda"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir venda?")) return; recordSystemLog(`Excluiu a venda do produto ${s.productName}`); const updated = sales.filter(item => item.id !== s.id); setSales(updated); saveTenantData("sales", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir Venda"><Trash2 size={14} /></button></div></div>)}
+                      {filteredSales.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma venda realizada.</p> : filteredSales.map((s: any) => <div key={s.id} className="py-2.5 flex justify-between items-center"><span>{s.productName} ({s.quantity} un) - {s.clientName} • Vendedor: <strong>{s.sellerName || "Geral"}</strong> • Pagamento: <strong>{s.paymentMethod}</strong> • <strong className="text-emerald-600">R$ {Number(s.total).toFixed(2)}</strong></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setSaleProductName(s.productName); setSaleClientName(s.clientName); setSaleQuantity(s.quantity); setSaleUnitPrice(s.unitPrice); setSalePaymentMethod(s.paymentMethod || "Pix"); setModalType("sale"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Venda"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir venda?")) return; recordSystemLog(`Excluiu a venda do produto ${s.productName}`); const updated = sales.filter(item => item.id !== s.id); setSales(updated); saveTenantData("sales", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir Venda"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1718,8 +1657,11 @@ export default function Home() {
               {activeTab === "stock" && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center border-b pb-3">
                       <h3 className="font-bold text-base">Estoque & Alertas de Reposição</h3>
+                      {isManager && (
+                        <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Geral"); setFormCost(15); setFormPrice(35); setFormMinStock(5); setFormDuration(10); setModalType("product"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Produto</button>
+                      )}
                     </div>
                     <div className="divide-y divide-slate-100 text-xs">
                       {products.length === 0 ? (
@@ -1763,9 +1705,12 @@ export default function Home() {
               {activeTab === "expenses" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Despesas Operacionais</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Despesas Operacionais</h3>
+                      <button onClick={() => { setEditingId(null); setFormName(""); setFormAmount(100); setExpenseCategory("Operacional"); setExpenseIsRecurrent(false); setFormDate(new Date().toISOString().split("T")[0]); setModalType("expense"); }} className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer">+ Cadastrar Despesa</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {expenses.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma despesa.</p> : expenses.map(e => <div key={e.id} className="py-2.5 flex justify-between items-center"><span>{e.date} - <strong>{e.description}</strong> {e.isRecurrent ? "(Recorrente)" : ""} • <span className="font-black text-rose-600">R$ {Number(e.amount).toFixed(2)}</span></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(e.id); setFormName(e.description); setFormAmount(e.amount); setExpenseCategory(e.category || "Operacional"); setExpenseIsRecurrent(e.isRecurrent || false); setFormDate(e.date || new Date().toISOString().split("T")[0]); setModalType("expense"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Despesa"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir despesa?")) return; recordSystemLog(`Excluiu despesa: ${e.description}`); const updated = expenses.filter(item => item.id !== e.id); setExpenses(updated); saveTenantData("expenses", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {expenses.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhuma despesa cadastrada.</p> : expenses.map(e => <div key={e.id} className="py-2.5 flex justify-between items-center"><span>{e.date} - <strong>{e.description}</strong> {e.isRecurrent ? "(Recorrente)" : ""} • <span className="font-black text-rose-600">R$ {Number(e.amount).toFixed(2)}</span></span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(e.id); setFormName(e.description); setFormAmount(e.amount); setExpenseCategory(e.category || "Operacional"); setExpenseIsRecurrent(e.isRecurrent || false); setFormDate(e.date || new Date().toISOString().split("T")[0]); setModalType("expense"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Despesa"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir despesa?")) return; recordSystemLog(`Excluiu despesa: ${e.description}`); const updated = expenses.filter(item => item.id !== e.id); setExpenses(updated); saveTenantData("expenses", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1774,9 +1719,15 @@ export default function Home() {
               {activeTab === "team" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow cursor-pointer">Gerenciar Funções</button>
+                        <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("employee"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Colaborador</button>
+                      </div>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador cadastrado.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1785,9 +1736,12 @@ export default function Home() {
               {activeTab === "customers" && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <h3 className="font-bold text-base">Base de Clientes</h3>
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <h3 className="font-bold text-base">Base de Clientes</h3>
+                      <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("customer"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Cadastrar Cliente</button>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {customers.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum cliente.</p> : customers.map(c => <div key={c.id} className="py-2.5 flex justify-between items-center"><span>{c.name} ({c.phone}) {c.notes ? <span className="opacity-60 italic">[{c.notes}]</span> : ""}</span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(c.id); setFormName(c.name); setFormPhone(c.phone || ""); setFormNotes(c.notes || ""); setModalType("customer"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir cliente?")) return; recordSystemLog(`Excluiu cadastro do cliente: ${c.name}`); const updated = customers.filter(item => item.id !== c.id); setCustomers(updated); saveTenantData("customers", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {customers.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum cliente cadastrado.</p> : customers.map(c => <div key={c.id} className="py-2.5 flex justify-between items-center"><span>{c.name} ({c.phone}) {c.notes ? <span className="opacity-60 italic">[{c.notes}]</span> : ""}</span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(c.id); setFormName(c.name); setFormPhone(c.phone || ""); setFormNotes(c.notes || ""); setModalType("customer"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir cliente?")) return; recordSystemLog(`Excluiu cadastro do cliente: ${c.name}`); const updated = customers.filter(item => item.id !== c.id); setCustomers(updated); saveTenantData("customers", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -2431,63 +2385,17 @@ export default function Home() {
               }
 
               try {
-                const { data: tenantData, error: fetchErr } = await supabase
-                  .from('tenants')
-                  .select('*')
-                  .eq('slug', currentCompany.slug)
-                  .single();
-
-                if (fetchErr || !tenantData) {
-                  setPasswordChangeError("Erro ao localizar dados da empresa na nuvem.");
-                  return;
-                }
-
-                let loginsList = tenantData.logins || [];
-                if (!Array.isArray(loginsList)) loginsList = [];
-
-                const userEmailLower = (activeUserEmail || "").toLowerCase();
-                const userNameLower = (activeUserName || "").toLowerCase();
-
-                let foundIndex = loginsList.findIndex((l: any) => {
-                  const lEmail = (l.email || "").toLowerCase();
-                  const lUser = (l.user || "").toLowerCase();
-                  const lName = (l.name || "").toLowerCase();
-                  return (userEmailLower && (lEmail === userEmailLower || lUser === userEmailLower)) ||
-                         (userNameLower && lName === userNameLower);
+                const { error: updateAuthErr } = await supabase.auth.updateUser({
+                  password: newPasswordInputSettings.trim()
                 });
 
-                if (foundIndex === -1 && loginsList.length > 0) {
-                  foundIndex = 0;
-                }
-
-                if (foundIndex === -1) {
-                  loginsList.push({
-                    name: activeUserName || "Gestor",
-                    email: activeUserEmail || "admin@empresa.com",
-                    user: "admin",
-                    role: activeUserRole || "Gestor",
-                    passwordHash: hashPassword(newPasswordInputSettings.trim())
-                  });
-                } else {
-                  loginsList[foundIndex] = {
-                    ...loginsList[foundIndex],
-                    passwordHash: hashPassword(newPasswordInputSettings.trim())
-                  };
-                }
-
-                const { error: updateErr } = await supabase
-                  .from('tenants')
-                  .update({ logins: loginsList })
-                  .eq('slug', currentCompany.slug);
-
-                if (updateErr) {
-                  setPasswordChangeError("Erro ao salvar a nova senha na nuvem.");
+                if (updateAuthErr) {
+                  setPasswordChangeError("Erro ao atualizar senha no servidor seguro.");
                   return;
                 }
 
-                setCurrentCompany((prev: any) => ({ ...prev, logins: loginsList }));
                 setPasswordChangeSuccess("🎉 Senha alterada com sucesso!");
-                recordSystemLog("Alterou sua própria senha de acesso via painel de configurações");
+                recordSystemLog("Alterou sua própria senha de acesso de forma segura no servidor");
 
                 setTimeout(() => {
                   setIsPasswordModalOpen(false);
@@ -2882,6 +2790,363 @@ export default function Home() {
               <div><label className="font-bold block mb-1">Observações do Agendamento</label><textarea rows={2} placeholder="Observações..." value={apptNotes} onChange={e => setApptNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Agendamento</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {modalType && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
+            <div className="border-b pb-3 flex justify-between items-center"><h2 className="text-base font-bold capitalize">{editingId ? `Editar ${modalType}` : `Cadastrar ${modalType}`}</h2><button onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button></div>
+
+            {modalType === "service" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (editingId) {
+                  const updated = services.map(s => s.id === editingId ? { ...s, name: formName, category: formCategory, duration: Number(formDuration), price: Number(formPrice), assignedRole: serviceAssignedRole } : s);
+                  setServices(updated);
+                  saveTenantData("services", updated);
+                  recordSystemLog(`Editou o serviço ${formName}`);
+                } else {
+                  const newS = { id: `s-${Date.now()}`, name: formName, category: formCategory, duration: Number(formDuration), price: Number(formPrice), assignedRole: serviceAssignedRole };
+                  const updated = [...services, newS];
+                  setServices(updated);
+                  saveTenantData("services", updated);
+                  recordSystemLog(`Cadastrou novo serviço: ${formName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Nome do Serviço *</label><input required placeholder="Nome do serviço" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Categoria</label><input value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div>
+                    <label className="font-bold block mb-1">Atribuir à Função *</label>
+                    <select value={serviceAssignedRole} onChange={e => setServiceAssignedRole(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                      {rolesList.map((r, idx) => <option key={idx} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Duração (min)</label><input type="number" value={formDuration} onChange={e => setFormDuration(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div><label className="font-bold block mb-1">Preço (R$) *</label><input type="number" step="0.01" required value={formPrice} onChange={e => setFormPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
+                </div>
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Serviço</button>
+              </form>
+            )}
+
+            {modalType === "product" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (editingId) {
+                  const updated = products.map(p => p.id === editingId ? { ...p, name: formName, category: formCategory, cost: Number(formCost), price: Number(formPrice), initialStock: Number(formDuration), minStock: Number(formMinStock) || 5 } : p);
+                  setProducts(updated);
+                  saveTenantData("products", updated);
+                  recordSystemLog(`Editou o produto ${formName}`);
+                } else {
+                  const newPr = { id: `pr-${Date.now()}`, name: formName, category: formCategory, cost: Number(formCost), price: Number(formPrice), initialStock: Number(formDuration), minStock: Number(formMinStock) || 5 };
+                  const updated = [...products, newPr];
+                  setProducts(updated);
+                  saveTenantData("products", updated);
+                  recordSystemLog(`Cadastrou novo produto: ${formName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Nome do Produto *</label><input required placeholder="Nome do produto" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div className="grid grid-cols-2 gap-2"><div><label className="font-bold block mb-1">Custo (R$)</label><input type="number" step="0.01" value={formCost} onChange={e => setFormCost(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div><div><label className="font-bold block mb-1">Venda (R$)</label><input type="number" step="0.01" value={formPrice} onChange={e => setFormPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Estoque Inicial *</label><input type="number" required value={formDuration} onChange={e => setFormDuration(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div><label className="font-bold block mb-1">Estoque Mínimo *</label><input type="number" required value={formMinStock} onChange={e => setFormMinStock(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
+                </div>
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Produto</button>
+              </form>
+            )}
+
+            {modalType === "sale" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                const qty = Number(saleQuantity) || 1;
+                const prc = Number(saleUnitPrice) || 0;
+                
+                if (editingId) {
+                  const oldSale = sales.find(s => s.id === editingId);
+                  const oldQty = oldSale && oldSale.productName === saleProductName ? oldSale.quantity : 0;
+                  const diffQty = qty - oldQty;
+                  if (diffQty > 0) {
+                    const targetProduct = stockSummary.find(p => p.name === saleProductName);
+                    if (!targetProduct || targetProduct.currentStock < diffQty) {
+                      alert(`⚠ Estoque insuficiente para o acréscimo! Saldo disponível: ${targetProduct?.currentStock || 0}`);
+                      return;
+                    }
+                  }
+                } else {
+                  const targetProduct = stockSummary.find(p => p.name === saleProductName);
+                  if (!targetProduct || targetProduct.currentStock < qty) {
+                    alert(`⚠ Estoque insuficiente! O produto "${saleProductName}" possui apenas ${targetProduct?.currentStock || 0} unidades disponíveis.`);
+                    return;
+                  }
+                }
+
+                if (editingId) {
+                  const updated = sales.map(s => s.id === editingId ? { ...s, productName: saleProductName, clientName: saleClientName || "Cliente", quantity: qty, unitPrice: prc, total: qty * prc, paymentMethod: salePaymentMethod, sellerName: s.sellerName || activeUserName } : s);
+                  setSales(updated);
+                  saveTenantData("sales", updated);
+                  recordSystemLog(`Editou venda do produto ${saleProductName}`);
+                } else {
+                  const newS = { id: `v-${Date.now()}`, date: formDate, clientName: saleClientName || "Cliente", productName: saleProductName, quantity: qty, unitPrice: prc, total: qty * prc, paymentMethod: salePaymentMethod, sellerName: activeUserName, status: "Concluída" };
+                  const updated = [newS, ...sales];
+                  setSales(updated);
+                  saveTenantData("sales", updated);
+                  recordSystemLog(`Registrou nova venda do produto ${saleProductName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div>
+                  <label className="font-bold block mb-1">Produto do Estoque *</label>
+                  <select value={saleProductName} onChange={e => { setSaleProductName(e.target.value); const p = availableStockForSale.find(prod => prod.name === e.target.value); if (p) setSaleUnitPrice(p.price); }} className="w-full border p-2.5 rounded-xl bg-white">
+                    {availableStockForSale.map(p => <option key={p.id} value={p.name}>{p.name} (Disponível: {p.currentStock})</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Quantidade *</label><input type="number" min="1" value={saleQuantity} onChange={e => setSaleQuantity(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div><label className="font-bold block mb-1">Preço Un. (R$)</label><input type="number" step="0.01" value={saleUnitPrice} onChange={e => setSaleUnitPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Forma de Pagamento *</label>
+                  <select value={salePaymentMethod} onChange={e => setSalePaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                    <option value="Pix">Pix</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Venda</button>
+              </form>
+            )}
+
+            {modalType === "employee" && (
+              <form onSubmit={async e => {
+                e.preventDefault();
+                
+                const primaryRole = empRoles[0] || rolesList[0] || "Profissional Principal";
+                if (editingId) {
+                  const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
+                  setEmployees(updated);
+                  saveTenantData("employees", updated);
+                  recordSystemLog(`Editou colaborador: ${formName} (${empSystemRole})`);
+                } else {
+                  const newEmp = { id: `e-${Date.now()}`, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
+                  const updated = [...employees, newEmp];
+                  setEmployees(updated);
+                  saveTenantData("employees", updated);
+                  recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Nome Completo *</label><input required placeholder="Nome do colaborador" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                
+                <div>
+                  <label className="font-bold block mb-1">Cargo no Sistema (Gestor ou Colaborador) *</label>
+                  <select value={empSystemRole} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600">
+                    <option value="Gestor">Gestor (Acesso administrativo ao painel)</option>
+                    <option value="Colaborador">Colaborador (Acesso restrito à agenda própria)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold block mb-1">Funções / Especialidades (Múltipla Escolha)</label>
+                  <div className="max-h-32 overflow-y-auto border p-2.5 rounded-xl space-y-1.5 bg-slate-50">
+                    {rolesList.map((r, idx) => {
+                      const isSelected = empRoles.includes(r);
+                      return (
+                        <div key={idx} onClick={() => {
+                          if (isSelected) {
+                            setEmpRoles(empRoles.filter(role => role !== r));
+                          } else {
+                            setEmpRoles([...empRoles, r]);
+                          }
+                        }} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-200 rounded">
+                          {isSelected ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-400" />}
+                          <span>{r}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Colaborador</button>
+              </form>
+            )}
+
+            {modalType === "customer" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (editingId) {
+                  const updated = customers.map(c => c.id === editingId ? { ...c, name: formName, phone: formPhone, notes: formNotes } : c);
+                  setCustomers(updated);
+                  saveTenantData("customers", updated);
+                  recordSystemLog(`Editou cliente: ${formName}`);
+                } else {
+                  const newC = { id: `c-${Date.now()}`, name: formName, phone: formPhone, notes: formNotes };
+                  const updated = [...customers, newC];
+                  setCustomers(updated);
+                  saveTenantData("customers", updated);
+                  recordSystemLog(`Cadastrou novo cliente: ${formName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Cliente</button>
+              </form>
+            )}
+
+            {modalType === "expense" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (editingId) {
+                  const updated = expenses.map(ex => ex.id === editingId ? { ...ex, date: formDate, description: formName, amount: Number(formAmount), category: expenseCategory, isRecurrent: expenseIsRecurrent } : ex);
+                  setExpenses(updated);
+                  saveTenantData("expenses", updated);
+                  recordSystemLog(`Editou despesa: ${formName}`);
+                } else {
+                  const newExp = { id: `e-${Date.now()}`, date: formDate, description: formName, amount: Number(formAmount), category: expenseCategory, isRecurrent: expenseIsRecurrent, status: "Pago" };
+                  const updated = [newExp, ...expenses];
+                  
+                  if (expenseIsRecurrent) {
+                    const [yyyy, mm, dd] = formDate.split("-");
+                    let nextMonth = Number(mm) + 1;
+                    let nextYear = Number(yyyy);
+                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+                    const nextDateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${dd}`;
+                    const nextExp = { id: `e-${Date.now() + 1}`, date: nextDateStr, description: formName + " (Recorrente)", amount: Number(formAmount), category: expenseCategory, isRecurrent: true, status: "Pago" };
+                    updated.push(nextExp);
+                  }
+
+                  setExpenses(updated);
+                  saveTenantData("expenses", updated);
+                  recordSystemLog(`Cadastrou nova despesa: ${formName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Descrição *</label><input required placeholder="Descrição da despesa" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Categoria *</label><input required placeholder="Operacional" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div><label className="font-bold block mb-1">Valor (R$) *</label><input type="number" step="0.01" required value={formAmount} onChange={e => setFormAmount(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
+                </div>
+                <div className="pt-1">
+                  <label onClick={() => setExpenseIsRecurrent(!expenseIsRecurrent)} className="flex items-center gap-2 cursor-pointer select-none">
+                    {expenseIsRecurrent ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-400" />}
+                    <span className="font-bold">Despesa Recorrente (repetir automaticamente todo mês)</span>
+                  </label>
+                </div>
+                <button type="submit" className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Despesa</button>
+              </form>
+            )}
+
+            {modalType === "promotion" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (editingId) {
+                  const updated = promotions.map(p => p.id === editingId ? { ...p, title: formName, targetItems: promoTargetItems, duration: promoDuration, discountPercent: Number(promoDiscount), isAllPromo: promoIsAll } : p);
+                  setPromotions(updated);
+                  saveTenantData("promotions", updated);
+                  recordSystemLog(`Editou promoção: ${formName}`);
+                } else {
+                  const newP: Promotion = { id: `p-${Date.now()}`, title: formName, targetItems: promoTargetItems, duration: promoDuration, discountPercent: Number(promoDiscount), isAllPromo: promoIsAll, active: true };
+                  const updated = [...promotions, newP];
+                  setPromotions(updated);
+                  saveTenantData("promotions", updated);
+                  recordSystemLog(`Criou nova promoção: ${formName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Nome da Promoção *</label><input required placeholder="Título da promoção" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                
+                <div>
+                  <label className="font-bold block mb-1">Selecionar Serviços e Produtos (Múltipla Escolha)</label>
+                  <div className="max-h-36 overflow-y-auto border p-2.5 rounded-xl space-y-1.5 bg-slate-50">
+                    {[...services.map(s => s.name), ...products.map(p => p.name)].map((item, idx) => {
+                      const isSelected = promoTargetItems.includes(item);
+                      return (
+                        <div key={idx} onClick={() => {
+                          if (isSelected) {
+                            setPromoTargetItems(promoTargetItems.filter(i => i !== item));
+                          } else {
+                            setPromoTargetItems([...promoTargetItems, item]);
+                          }
+                        }} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-200 rounded">
+                          {isSelected ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-400" />}
+                          <span>{item}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Tempo de Validade *</label><input required placeholder="Ex: 7 dias" value={promoDuration} onChange={e => setPromoDuration(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                  <div><label className="font-bold block mb-1">Desconto (%) *</label><input type="number" min="1" required value={promoDiscount} onChange={e => setPromoDiscount(Math.max(1, Number(e.target.value)))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
+                </div>
+                <div className="pt-1">
+                  <label onClick={() => setPromoIsAll(!promoIsAll)} className="flex items-center gap-2 cursor-pointer select-none">
+                    {promoIsAll ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-400" />}
+                    <span className="font-bold">Aplicar em Tudo (Tudo em Promoção)</span>
+                  </label>
+                </div>
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Promoção</button>
+              </form>
+            )}
+
+            {modalType === "attendance" && (
+              <form onSubmit={e => {
+                e.preventDefault();
+                const assignedProf = isManager ? formProfessionalName : activeUserName;
+                if (editingId) {
+                  const updated = attendances.map(a => a.id === editingId ? { ...a, date: formDate, time: formTime, clientName: formClientName, serviceName: formServiceName, professionalName: assignedProf, netValue: Number(formGrossValue), paymentMethod: formPaymentMethod, notes: formNotes } : a);
+                  setAttendances(updated);
+                  saveTenantData("attendances", updated);
+                  recordSystemLog(`Editou atendimento de ${formClientName}`);
+                } else {
+                  const newAtt = { id: `at-${Date.now()}`, date: formDate, time: formTime, clientName: formClientName || "Cliente", serviceName: formServiceName, professionalName: assignedProf, grossValue: Number(formGrossValue), netValue: Number(formGrossValue), paymentMethod: formPaymentMethod, notes: formNotes, status: "Atendido" };
+                  const updated = [newAtt, ...attendances];
+                  setAttendances(updated);
+                  saveTenantData("attendances", updated);
+                  recordSystemLog(`Lançou atendimento para ${formClientName}`);
+                }
+                setModalType(null);
+              }} className="space-y-3">
+                <div><label className="font-bold block mb-1">Cliente *</label><input required value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Serviço</label><select value={formServiceName} onChange={e => { setFormServiceName(e.target.value); const s = services.find(srv => srv.name === e.target.value); if (s) setFormGrossValue(s.price); }} className="w-full border p-2.5 rounded-xl bg-white">{services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}</select></div>
+                  <div>
+                    <label className="font-bold block mb-1">Profissional</label>
+                    {isManager ? (
+                      <select value={formProfessionalName} onChange={e => setFormProfessionalName(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                        {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
+                      </select>
+                    ) : (
+                      <input disabled value={activeUserName} className="w-full border p-2.5 rounded-xl bg-slate-100 font-bold" />
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="font-bold block mb-1">Valor (R$)</label><input type="number" step="0.01" value={formGrossValue} onChange={e => setFormGrossValue(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
+                  <div>
+                    <label className="font-bold block mb-1">Pagamento</label>
+                    <select value={formPaymentMethod} onChange={e => setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
+                      <option value="Pix">Pix</option>
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="Cartão de Débito">Cartão de Débito</option>
+                      <option value="Dinheiro">Dinheiro</option>
+                    </select>
+                  </div>
+                </div>
+                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Atendimento</button>
+              </form>
+            )}
           </div>
         </div>
       )}
