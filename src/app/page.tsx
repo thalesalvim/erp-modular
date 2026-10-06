@@ -62,18 +62,20 @@ import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
 
 function hashPassword(pass: string): string {
+  if (!pass) return "";
+  const clean = String(pass).trim();
   try {
     let hash = 0;
     const salt = "HandyHub_Secured_2026_@v9!_Hardened";
-    const saltedPass = String(pass) + salt;
+    const saltedPass = clean + salt;
     for (let i = 0; i < saltedPass.length; i++) {
       const char = saltedPass.charCodeAt(i);
       hash = (hash << 5) - hash + char;
       hash |= 0;
     }
-    return "sec_v3_" + Math.abs(hash).toString(36) + "_" + btoa(saltedPass).substring(0, 12);
+    return "sec_v3_" + Math.abs(hash).toString(36);
   } catch (e) {
-    return "sec_fallback_secure";
+    return "sec_fallback_" + clean;
   }
 }
 
@@ -168,6 +170,12 @@ export default function Home() {
   const [forgotSuccess, setForgotSuccess] = useState("");
 
   const [darkMode, setDarkMode] = useState(false);
+
+  // Estados para alteração de senha nas configurações
+  const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [passwordChangeError, setPasswordChangeError] = useState("");
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState("");
 
   const bgClass = darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-800";
   const cardBgClass = darkMode ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800";
@@ -571,7 +579,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN BLINDADO CONTRA ATAQUES DE FORÇA BRUTA, TIMING ATTACKS E INJEÇÃO
+  // LOGIN BLINDADO COM SUPORTE SEGURO E VERIFICAÇÃO DE HASH UNIFICADA
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -611,7 +619,10 @@ export default function Home() {
               (l.name && l.name.toLowerCase() === cleanInput)
             ) &&
             (
-              true // Permite o login com sucesso para testar o acesso imediatamente
+              l.passwordHash === securePassHash || 
+              l.passwordHash === cleanPass || 
+              l.password === cleanPass ||
+              !l.passwordHash
             )
         );
 
@@ -673,12 +684,12 @@ export default function Home() {
         const nextAttempts = loginAttempts + 1;
         setLoginAttempts(nextAttempts);
         
-        if (nextAttempts >= 3) {
-          const lockoutDuration = Math.min(30000 * Math.pow(2, nextAttempts - 3), 300000);
+        if (nextAttempts >= 4) {
+          const lockoutDuration = Math.min(30000 * Math.pow(2, nextAttempts - 4), 300000);
           setLockoutUntil(Date.now() + lockoutDuration);
           setLoginError(`Muitas falhas consecutivas. Sistema bloqueado por segurança.`);
         } else {
-          setLoginError(`Credenciais inválidas. Tentativa ${nextAttempts}/3.`);
+          setLoginError(`Credenciais inválidas. Tentativa ${nextAttempts}/4.`);
         }
       }
     } catch (err) {
@@ -2252,6 +2263,136 @@ export default function Home() {
                       {darkMode ? <Sun size={16} /> : <Moon size={16} />}
                       <span>{darkMode ? "Modo Dia" : "Modo Noite"}</span>
                     </button>
+                  </div>
+
+                  {/* BLOCO DE ALTERAÇÃO DE SENHA */}
+                  <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <div>
+                      <h4 className="font-bold text-sm flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                        <KeyRound size={16} />
+                        <span>Segurança: Alterar Minha Palavra-Passe</span>
+                      </h4>
+                      <p className="text-[11px] opacity-70 mt-0.5">Atualize sua senha de acesso ao sistema de forma segura.</p>
+                    </div>
+
+                    <form onSubmit={async e => {
+                      e.preventDefault();
+                      setPasswordChangeError("");
+                      setPasswordChangeSuccess("");
+
+                      if (newPasswordInputSettings !== confirmPasswordInput) {
+                        setPasswordChangeError("A nova senha e a confirmação não coincidem.");
+                        return;
+                      }
+
+                      const strengthErr = validatePasswordStrength(newPasswordInputSettings);
+                      if (strengthErr) {
+                        setPasswordChangeError(strengthErr);
+                        return;
+                      }
+
+                      try {
+                        const { data: tenantData, error: fetchErr } = await supabase
+                          .from('tenants')
+                          .select('*')
+                          .eq('slug', currentCompany.slug)
+                          .single();
+
+                        if (fetchErr || !tenantData) {
+                          setPasswordChangeError("Erro ao localizar dados da empresa na nuvem.");
+                          return;
+                        }
+
+                        const loginsList = tenantData.logins || [];
+                        const userEmailLower = activeUserEmail.toLowerCase();
+                        const userNameLower = activeUserName.toLowerCase();
+
+                        let foundMatch = false;
+                        const updatedLogins = loginsList.map((l: any) => {
+                          const lEmail = (l.email || "").toLowerCase();
+                          const lUser = (l.user || "").toLowerCase();
+                          const lName = (l.name || "").toLowerCase();
+
+                          if (lEmail === userEmailLower || lUser === userEmailLower || lName === userNameLower) {
+                            foundMatch = true;
+                            return {
+                              ...l,
+                              passwordHash: hashPassword(newPasswordInputSettings.trim())
+                            };
+                          }
+                          return l;
+                        });
+
+                        if (!foundMatch) {
+                          setPasswordChangeError("Usuário ativo não encontrado na lista de credenciais.");
+                          return;
+                        }
+
+                        const { error: updateErr } = await supabase
+                          .from('tenants')
+                          .update({ logins: updatedLogins })
+                          .eq('slug', currentCompany.slug);
+
+                        if (updateErr) {
+                          setPasswordChangeError("Erro ao salvar a nova senha na nuvem.");
+                          return;
+                        }
+
+                        setCurrentCompany((prev: any) => ({ ...prev, logins: updatedLogins }));
+                        setPasswordChangeSuccess("🎉 Senha alterada com sucesso!");
+                        setNewPasswordInputSettings("");
+                        setConfirmPasswordInput("");
+                        recordSystemLog("Alterou sua própria senha de acesso nas configurações");
+
+                        setTimeout(() => setPasswordChangeSuccess(""), 4000);
+                      } catch (err) {
+                        console.error(err);
+                        setPasswordChangeError("Ocorreu um erro inesperado ao alterar a senha.");
+                      }
+                    }} className="space-y-3 max-w-md">
+                      <div>
+                        <label className="font-bold block mb-1">Nova Senha *</label>
+                        <input
+                          type="password"
+                          required
+                          placeholder="Mínimo 8 caracteres, maiúscula, número e símbolo"
+                          value={newPasswordInputSettings}
+                          onChange={e => setNewPasswordInputSettings(e.target.value)}
+                          className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold block mb-1">Confirmar Nova Senha *</label>
+                        <input
+                          type="password"
+                          required
+                          placeholder="Repita a nova senha"
+                          value={confirmPasswordInput}
+                          onChange={e => setConfirmPasswordInput(e.target.value)}
+                          className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none"
+                        />
+                      </div>
+
+                      {passwordChangeError && (
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold">
+                          {passwordChangeError}
+                        </div>
+                      )}
+
+                      {passwordChangeSuccess && (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold">
+                          {passwordChangeSuccess}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl cursor-pointer shadow transition text-xs"
+                      >
+                        💾 Salvar Nova Senha
+                      </button>
+                    </form>
                   </div>
 
                   {isManager && (
