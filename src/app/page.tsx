@@ -54,7 +54,9 @@ import {
   ArrowLeft,
   KeyRound,
   Mail,
-  Smartphone
+  Smartphone,
+  Menu,
+  X
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
@@ -129,6 +131,7 @@ export interface SaleItem {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
@@ -166,7 +169,7 @@ export default function Home() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
-  const [rolesList, setRolesList] = useState<string[]>(["Cabeleireiro", "Manicure", "Barbeiro", "Esteticista"]);
+  const [rolesList, setRolesList] = useState<string[]>(["Profissional Principal", "Assistente", "Especialista"]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [stockMoves, setStockMoves] = useState<any[]>([]);
@@ -213,7 +216,7 @@ export default function Home() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formName, setFormName] = useState("");
-  const [formCategory, setFormCategory] = useState("Cabelos");
+  const [formCategory, setFormCategory] = useState("Geral");
   const [formDuration, setFormDuration] = useState(30);
   const [formPrice, setFormPrice] = useState(50);
   const [formCost, setFormCost] = useState(15);
@@ -229,7 +232,7 @@ export default function Home() {
   const [formPaymentMethod, setFormPaymentMethod] = useState("Pix");
   const [formNotes, setFormNotes] = useState("");
 
-  const [serviceAssignedRole, setServiceAssignedRole] = useState("Cabeleireiro");
+  const [serviceAssignedRole, setServiceAssignedRole] = useState("Profissional Principal");
 
   const [isRolesModalOpen, setIsRolesModalOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
@@ -297,11 +300,94 @@ export default function Home() {
     } catch (e) {}
   };
 
+  const updateCompanyInMasterDb = async (updatedFields: any) => {
+    if (!currentCompany) return;
+    const updatedCompany = { ...currentCompany, ...updatedFields };
+    setCurrentCompany(updatedCompany);
+    if (updatedFields.companyName || updatedFields.company_name) {
+      setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
+    }
+    const { error } = await supabase
+      .from('tenants')
+      .update(updatedFields)
+      .eq('slug', currentCompany.slug);
+    if (error) {
+      console.error("Erro ao atualizar tenant na nuvem:", error);
+    }
+  };
+
+  const saveUserPreferences = (newDark: boolean, newColor: string) => {
+    if (!currentCompany || !activeUserEmail) return;
+    const userPrefsKey = `saas_prefs_${currentCompany.slug}_${activeUserEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
+  };
+
+  const saveTenantData = async (key: string, data: any) => {
+    if (!currentCompany) return;
+    const currentPayload = {
+      employees,
+      customers,
+      services,
+      rolesList,
+      promotions,
+      products,
+      stockMoves,
+      sales,
+      expenses,
+      appointments,
+      attendances,
+      [key]: data
+    };
+    await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
+    localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
+  };
+
+  const loadTenantData = async (slug: string) => {
+    const cachedData = localStorage.getItem(`saas_cache_${slug}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.employees) setEmployees(parsed.employees);
+        if (parsed.customers) setCustomers(parsed.customers);
+        if (parsed.services) setServices(parsed.services);
+        if (parsed.rolesList) setRolesList(parsed.rolesList);
+        if (parsed.promotions) setPromotions(parsed.promotions);
+        if (parsed.products) setProducts(parsed.products);
+        if (parsed.stockMoves) setStockMoves(parsed.stockMoves);
+        if (parsed.sales) setSales(parsed.sales);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+        if (parsed.appointments) setAppointments(parsed.appointments);
+        if (parsed.attendances) setAttendances(parsed.attendances);
+      } catch (e) {}
+    }
+
+    try {
+      const cloudData = await getAllTenantDataCloud(slug);
+      if (cloudData) {
+        if (cloudData.employees) setEmployees(cloudData.employees);
+        if (cloudData.customers) setCustomers(cloudData.customers);
+        if (cloudData.services) setServices(cloudData.services);
+        if (cloudData.rolesList) setRolesList(cloudData.rolesList);
+        if (cloudData.promotions) setPromotions(cloudData.promotions);
+        if (cloudData.products) setProducts(cloudData.products);
+        if (cloudData.stockMoves) setStockMoves(cloudData.stockMoves);
+        if (cloudData.sales) setSales(cloudData.sales);
+        if (cloudData.expenses) setExpenses(cloudData.expenses);
+        if (cloudData.appointments) setAppointments(cloudData.appointments);
+        if (cloudData.attendances) setAttendances(cloudData.attendances);
+
+        localStorage.setItem(`saas_cache_${slug}`, JSON.stringify(cloudData));
+      }
+    } catch (e) {
+      console.error("Erro ao sincronizar dados unificados da nuvem:", e);
+    }
+  };
+
   useEffect(() => {
     setIsMounted(true);
     const initializeApp = async () => {
       const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || "studio-hair";
+      const slugParam = params.get("c") || "unidade-padrao";
       const masterBypassParam = params.get("master_bypass");
       const storedBypass = localStorage.getItem("master_bypass_auth");
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
@@ -316,14 +402,14 @@ export default function Home() {
 
       if (!found) {
         found = {
-          slug: "studio-hair",
-          company_name: "Studio Hair & Beauty",
+          slug: "unidade-padrao",
+          company_name: "Empresa Exemplo LTDA",
           status: "Ativo",
           planName: "Pro",
-          owner_name: "Gisele Alvim",
-          owner_email: "gisele@gmail.com",
+          owner_name: "Gestor Principal",
+          owner_email: "gestor@empresa.com",
           logins: [
-            { user: "gisele", email: "gisele@gmail.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gisele Alvim" }
+            { user: "gestor", email: "gestor@empresa.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gestor Principal" }
           ]
         };
       }
@@ -338,7 +424,7 @@ export default function Home() {
         };
 
         setCurrentCompany(normalizedFound);
-        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Studio Hair & Beauty" }));
+        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Empresa Exemplo LTDA" }));
         
         if (normalizedFound.status === "Bloqueado") {
           setIsTenantBlocked(true);
@@ -351,9 +437,9 @@ export default function Home() {
 
         if (masterBypassParam && storedBypass && masterBypassParam === storedBypass) {
           setIsMasterBypassActive(true);
-          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gisele Alvim");
+          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gestor Principal");
           setActiveUserRole(bypassLoginRole || "Dono");
-          setActiveUserEmail(normalizedFound.owner_email || "gisele@gmail.com");
+          setActiveUserEmail(normalizedFound.owner_email || "gestor@empresa.com");
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado com Segurança");
@@ -391,7 +477,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const currentSlug = currentCompany?.slug || "studio-hair";
+    const currentSlug = currentCompany?.slug || "unidade-padrao";
     if (!currentSlug) return;
 
     const interval = setInterval(async () => {
@@ -465,90 +551,6 @@ export default function Home() {
       }
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
-
-  const saveUserPreferences = (newDark: boolean, newColor: string) => {
-    if (!currentCompany || !activeUserEmail) return;
-    const userPrefsKey = `saas_prefs_${currentCompany.slug}_${activeUserEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
-  };
-
-  const loadTenantData = async (slug: string) => {
-    const cachedData = localStorage.getItem(`saas_cache_${slug}`);
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        if (parsed.employees) setEmployees(parsed.employees);
-        if (parsed.customers) setCustomers(parsed.customers);
-        if (parsed.services) setServices(parsed.services);
-        if (parsed.rolesList) setRolesList(parsed.rolesList);
-        if (parsed.promotions) setPromotions(parsed.promotions);
-        if (parsed.products) setProducts(parsed.products);
-        if (parsed.stockMoves) setStockMoves(parsed.stockMoves);
-        if (parsed.sales) setSales(parsed.sales);
-        if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.appointments) setAppointments(parsed.appointments);
-        if (parsed.attendances) setAttendances(parsed.attendances);
-      } catch (e) {}
-    }
-
-    try {
-      const cloudData = await getAllTenantDataCloud(slug);
-      if (cloudData) {
-        if (cloudData.employees) setEmployees(cloudData.employees);
-        if (cloudData.customers) setCustomers(cloudData.customers);
-        if (cloudData.services) setServices(cloudData.services);
-        if (cloudData.rolesList) setRolesList(cloudData.rolesList);
-        if (cloudData.promotions) setPromotions(cloudData.promotions);
-        if (cloudData.products) setProducts(cloudData.products);
-        if (cloudData.stockMoves) setStockMoves(cloudData.stockMoves);
-        if (cloudData.sales) setSales(cloudData.sales);
-        if (cloudData.expenses) setExpenses(cloudData.expenses);
-        if (cloudData.appointments) setAppointments(cloudData.appointments);
-        if (cloudData.attendances) setAttendances(cloudData.attendances);
-
-        localStorage.setItem(`saas_cache_${slug}`, JSON.stringify(cloudData));
-      }
-    } catch (e) {
-      console.error("Erro ao sincronizar dados unificados da nuvem:", e);
-    }
-  };
-
-  const saveTenantData = async (key: string, data: any) => {
-    if (!currentCompany) return;
-    
-    const currentPayload = {
-      employees,
-      customers,
-      services,
-      rolesList,
-      promotions,
-      products,
-      stockMoves,
-      sales,
-      expenses,
-      appointments,
-      attendances,
-      [key]: data
-    };
-
-    await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
-    localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
-  };
-
-  const updateCompanyInMasterDb = async (updatedFields: any) => {
-    const updatedCompany = { ...currentCompany, ...updatedFields };
-    setCurrentCompany(updatedCompany);
-    if (updatedFields.companyName || updatedFields.company_name) {
-      setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
-    }
-    const { error } = await supabase
-      .from('tenants')
-      .update(updatedFields)
-      .eq('slug', currentCompany.slug);
-    if (error) {
-      console.error("Erro ao atualizar tenant na nuvem:", error);
-    }
-  };
 
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -964,7 +966,7 @@ export default function Home() {
                 required
                 value={loginUser}
                 onChange={e => setLoginUser(e.target.value)}
-                placeholder="seu.usuario"
+                placeholder="ex: usuario_exemplo"
                 className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
               />
             </div>
@@ -1092,7 +1094,7 @@ export default function Home() {
                     <input
                       type="text"
                       required
-                      placeholder="ex: gisele@gmail.com"
+                      placeholder="ex: seu.email@empresa.com"
                       value={forgotIdentifier}
                       onChange={e => setForgotIdentifier(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-white"
@@ -1134,7 +1136,7 @@ export default function Home() {
                       <Mail size={18} className="text-indigo-400" />
                       <div>
                         <strong className="block text-white">Enviar por E-mail</strong>
-                        <span className="text-[10px] text-slate-400">Código enviado para {forgotTargetUser?.email || "o e-mail cadastrado"}</span>
+                        <span className="text-[10px] text-slate-400">Código enviado para o e-mail cadastrado</span>
                       </div>
                     </div>
 
@@ -1164,7 +1166,7 @@ export default function Home() {
                         const code = Math.floor(100000 + Math.random() * 900000).toString();
                         setGeneratedCode(code);
                         
-                        const destino = forgotMethod === "email" ? (forgotTargetUser?.email || "seu e-mail") : "seu telemóvel";
+                        const destino = forgotMethod === "email" ? "seu e-mail" : "seu telemóvel";
                         alert(`✅ Código de verificação enviado com segurança para ${destino}.`);
                         
                         setForgotStep("code");
@@ -1199,7 +1201,7 @@ export default function Home() {
                       type="text"
                       maxLength={6}
                       required
-                      placeholder="123456"
+                      placeholder="000000"
                       value={forgotInputCode}
                       onChange={e => setForgotInputCode(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg text-white"
@@ -1274,7 +1276,7 @@ export default function Home() {
                     <input
                       type="password"
                       required
-                      placeholder="Ex: SenhaForte@2026"
+                      placeholder="Ex: NovaSenha@2026"
                       value={newPasswordInput}
                       onChange={e => setNewPasswordInput(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white"
@@ -1300,8 +1302,30 @@ export default function Home() {
   }
 
   return (
-    <div className={`flex h-screen font-sans ${bgClass} relative`}>
-      <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-10">
+    <div className={`flex h-screen font-sans ${bgClass} relative overflow-hidden`}>
+      {/* Botão Hambúrguer sempre disponível para alternar o ecrã inteiro */}
+      <div className="absolute top-3 left-4 z-30">
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2.5 rounded-xl bg-slate-900 text-white shadow-lg border border-slate-700 flex items-center justify-center cursor-pointer hover:bg-slate-800 transition"
+          title="Alternar Menu Lateral"
+        >
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      {/* Overlay Escuro para fechar o menu ao clicar fora */}
+      {isMobileMenuOpen && (
+        <div
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20"
+        />
+      )}
+
+      {/* Sidebar Retrátil (Funciona perfeitamente em Desktop e Mobile) */}
+      <aside className={`w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-30 fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out ${
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
         <div>
           {isMasterBypassActive && (
             <div className="mb-4 p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl space-y-1.5 text-center">
@@ -1312,7 +1336,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mb-6 px-2">
+          <div className="mb-6 px-2 pt-2">
             <div className="flex items-center gap-2 font-bold text-lg mb-1">
               {renderCompanyLogo("w-6 h-6", 22)}
               <span className="tracking-tight text-white truncate">{salonConfig.name}</span>
@@ -1326,11 +1350,14 @@ export default function Home() {
 
           <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2 px-2">Menu Operacional</div>
 
-          <nav className="flex flex-col gap-1 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
-            {visibleTabs.map((tab) => (
+          <nav className="flex flex-col gap-1 overflow-y-auto max-h-[calc(100vh-270px)] pr-1">
+            {visibleTabs.map((tab: any) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setIsMobileMenuOpen(false);
+                }}
                 className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                   activeTab === tab.id ? `${theme.activeBg} text-white shadow-md` : "text-slate-300 hover:bg-slate-800"
                 }`}
@@ -1360,49 +1387,49 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        <header className={`h-16 border-b px-8 flex items-center justify-between shadow-sm ${headerBgClass}`}>
-          <div className="flex items-center gap-2 text-sm opacity-80">
-            <span className="font-semibold">{salonConfig.name}</span>
+      <main className="flex-1 flex flex-col overflow-hidden relative w-full">
+        <header className={`h-16 border-b px-4 lg:px-8 flex items-center justify-between shadow-sm ${headerBgClass}`}>
+          <div className="flex items-center gap-2 text-xs lg:text-sm opacity-80 pl-14">
+            <span className="font-semibold truncate max-w-[120px] lg:max-w-none">{salonConfig.name}</span>
             <ChevronRight size={16} />
-            <span className="capitalize font-bold">{activeTab === "my_schedule" ? "Meu Banco de Horas & Funções" : activeTab === "my_plan" ? "Meu Plano & Consultorias" : activeTab === "dre" ? "Módulo DRE Gerencial" : activeTab}</span>
+            <span className="capitalize font-bold truncate max-w-[140px] lg:max-w-none">{activeTab === "my_schedule" ? "Meu Banco de Horas" : activeTab === "my_plan" ? "Meu Plano" : activeTab === "dre" ? "DRE Gerencial" : activeTab}</span>
           </div>
 
           <div className="flex items-center gap-2">
             {activeTab === "calendar" && (
-              <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Novo Agendamento</button>
+              <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Agendamento</span><span className="sm:hidden">Novo</span></button>
             )}
             {activeTab === "atendimentos" && (
-              <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("attendance"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Lançar Atendimento</button>
+              <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("attendance"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Lançar Atendimento</span><span className="sm:hidden">Lançar</span></button>
             )}
             {activeTab === "pos" && (
-              <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("sale"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> + Nova Venda</button>
+              <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("sale"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">+ Nova Venda</span><span className="sm:hidden">Venda</span></button>
             )}
             {activeTab === "services" && isManager && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Cabelos"); setFormDuration(30); setFormPrice(50); setServiceAssignedRole(rolesList[0] || "Cabeleireiro"); setModalType("service"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Novo Serviço</button>
+              <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Geral"); setFormDuration(30); setFormPrice(50); setServiceAssignedRole(rolesList[0] || "Profissional Principal"); setModalType("service"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Serviço</span><span className="sm:hidden">Serviço</span></button>
             )}
             {activeTab === "promotions" && isManager && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setPromoTargetItems([]); setPromoDuration("7 dias"); setPromoDiscount(1); setPromoIsAll(false); setModalType("promotion"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Cadastrar Promoção</button>
+              <button onClick={() => { setEditingId(null); setFormName(""); setPromoTargetItems([]); setPromoDuration("7 dias"); setPromoDiscount(1); setPromoIsAll(false); setModalType("promotion"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Promoção</span><span className="sm:hidden">Promoção</span></button>
             )}
             {activeTab === "team" && isManager && (
               <div className="flex items-center gap-2">
-                <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"><Briefcase size={14} /> Gerenciar Funções/Cargos</button>
-                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Cabeleireiro"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("employee"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Cadastrar Colaborador</button>
+                <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1 shadow cursor-pointer"><Briefcase size={14} /> <span className="hidden md:inline">Funções</span></button>
+                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("employee"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Colaborador</span><span className="sm:hidden">Equipe</span></button>
               </div>
             )}
             {activeTab === "stock" && isManager && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Cabelos"); setFormCost(15); setFormPrice(35); setFormMinStock(5); setFormDuration(10); setModalType("product"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Novo Produto</button>
+              <button onClick={() => { setEditingId(null); setFormName(""); setFormCategory("Geral"); setFormCost(15); setFormPrice(35); setFormMinStock(5); setFormDuration(10); setModalType("product"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Produto</span><span className="sm:hidden">Produto</span></button>
             )}
             {activeTab === "expenses" && isManager && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setFormAmount(100); setExpenseCategory("Operacional"); setExpenseIsRecurrent(false); setFormDate(new Date().toISOString().split("T")[0]); setModalType("expense"); }} className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer"><Plus size={16} /> Cadastrar Despesas</button>
+              <button onClick={() => { setEditingId(null); setFormName(""); setFormAmount(100); setExpenseCategory("Operacional"); setExpenseIsRecurrent(false); setFormDate(new Date().toISOString().split("T")[0]); setModalType("expense"); }} className="bg-rose-600 hover:bg-rose-700 text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Despesas</span><span className="sm:hidden">Despesa</span></button>
             )}
             {activeTab === "customers" && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("customer"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Cadastrar Cliente</button>
+              <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("customer"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Cliente</span><span className="sm:hidden">Cliente</span></button>
             )}
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 pb-12">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8 pb-12">
           {activeTab !== "settings" && !isModuleAllowedForCurrentPlan(activeTab) ? (
             <div className="max-w-xl mx-auto my-16 p-8 bg-slate-900 border border-amber-500/30 rounded-3xl text-center space-y-4">
               <div className="inline-flex p-4 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
@@ -1420,19 +1447,19 @@ export default function Home() {
             <>
               {activeTab === "dashboard" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
-                  <div className={`p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${cardBgClass}`}>
+                  <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 ${cardBgClass}`}>
                     <div>
-                      <h2 className="text-xl font-black flex items-center gap-2">
-                        <Zap className="text-amber-500" size={24} />
-                        Painel Operacional do Dia ({salonConfig.name})
+                      <h2 className="text-lg lg:text-xl font-black flex items-center gap-2">
+                        <Zap className="text-amber-500" size={22} />
+                        Painel Operacional ({salonConfig.name})
                       </h2>
                       <p className="text-xs opacity-70 mt-0.5">Monte e personalize os blocos do seu painel do seu jeito.</p>
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setIsWidgetCustomizerOpen(true)} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
+                    <div className="flex flex-wrap items-center gap-2 lg:gap-3">
+                      <button onClick={() => setIsWidgetCustomizerOpen(true)} className={`${theme.buttonBg} text-white font-bold text-[11px] lg:text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
                         <SlidersHorizontal size={15} />
-                        <span>Personalizar Dashboard</span>
+                        <span>Personalizar</span>
                       </button>
 
                       <button onClick={() => {
@@ -1440,24 +1467,24 @@ export default function Home() {
                         setTempWeeklyGoal(goals.weekly);
                         setTempMonthlyGoal(goals.monthly);
                         setIsGoalModalOpen(true);
-                      }} className={`${theme.buttonBg} text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
+                      }} className={`${theme.buttonBg} text-white font-bold text-[11px] lg:text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition`}>
                         <Target size={15} />
-                        <span>Editar Metas</span>
+                        <span>Metas</span>
                       </button>
 
-                      <div className={`flex items-center gap-2 border px-3 py-1.5 rounded-xl ${darkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                        <span className="text-xs font-bold opacity-80">Mês:</span>
-                        <input type="month" value={salonConfig.analysisMonth} onChange={e => setSalonConfig({ ...salonConfig, analysisMonth: e.target.value })} className="bg-transparent text-xs font-black outline-none cursor-pointer" />
+                      <div className={`flex items-center gap-2 border px-3 py-2 rounded-xl ${darkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                        <span className="text-[11px] font-bold opacity-80">Mês:</span>
+                        <input type="month" value={salonConfig.analysisMonth} onChange={e => setSalonConfig({ ...salonConfig, analysisMonth: e.target.value })} className="bg-transparent text-[11px] font-black outline-none cursor-pointer" />
                       </div>
                     </div>
                   </div>
 
                   {visibleWidgets.goalsBlock && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className={`p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold uppercase tracking-wider opacity-60">Meta Diária</span>
-                          <span className="text-xs font-black text-indigo-500">R$ {operationalDashboardMetrics.totalTodayRevenue.toFixed(2)} / R$ {goals.daily.toFixed(2)}</span>
+                          <span className="text-[11px] lg:text-xs font-black text-indigo-500">R$ {operationalDashboardMetrics.totalTodayRevenue.toFixed(2)} / R$ {goals.daily.toFixed(2)}</span>
                         </div>
                         <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                           <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (operationalDashboardMetrics.totalTodayRevenue / (goals.daily || 1)) * 100)}%` }} />
@@ -1465,10 +1492,10 @@ export default function Home() {
                         <p className="text-[11px] opacity-70">Progresso do caixa de hoje</p>
                       </div>
 
-                      <div className={`p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold uppercase tracking-wider opacity-60">Meta Semanal</span>
-                          <span className="text-xs font-black text-emerald-500">R$ {operationalDashboardMetrics.totalWeeklyRevenue.toFixed(2)} / R$ {goals.weekly.toFixed(2)}</span>
+                          <span className="text-[11px] lg:text-xs font-black text-emerald-500">R$ {operationalDashboardMetrics.totalWeeklyRevenue.toFixed(2)} / R$ {goals.weekly.toFixed(2)}</span>
                         </div>
                         <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                           <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (operationalDashboardMetrics.totalWeeklyRevenue / (goals.weekly || 1)) * 100)}%` }} />
@@ -1476,10 +1503,10 @@ export default function Home() {
                         <p className="text-[11px] opacity-70">Progresso dos últimos 7 dias</p>
                       </div>
 
-                      <div className={`p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm space-y-2 ${cardBgClass}`}>
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold uppercase tracking-wider opacity-60">Meta Mensal</span>
-                          <span className="text-xs font-black text-pink-500">R$ {operationalDashboardMetrics.totalMonthRevenue.toFixed(2)} / R$ {goals.monthly.toFixed(2)}</span>
+                          <span className="text-[11px] lg:text-xs font-black text-pink-500">R$ {operationalDashboardMetrics.totalMonthRevenue.toFixed(2)} / R$ {goals.monthly.toFixed(2)}</span>
                         </div>
                         <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                           <div className="bg-pink-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (operationalDashboardMetrics.totalMonthRevenue / (goals.monthly || 1)) * 100)}%` }} />
@@ -1491,21 +1518,21 @@ export default function Home() {
 
                   {visibleWidgets.quickStats && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className={`p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
                         <span className="text-xs font-bold uppercase tracking-wider opacity-60 block mb-1">Atendimentos Hoje</span>
-                        <p className="text-2xl font-black text-indigo-500">{operationalDashboardMetrics.doneCount} <span className="text-xs opacity-60">realizados</span></p>
+                        <p className="text-xl lg:text-2xl font-black text-indigo-500">{operationalDashboardMetrics.doneCount} <span className="text-xs opacity-60">realizados</span></p>
                         <p className="text-[11px] opacity-70 mt-1">{operationalDashboardMetrics.todayCount} agendamentos totais no dia</p>
                       </div>
 
-                      <div className={`p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
                         <span className="text-xs font-bold uppercase tracking-wider opacity-60 block mb-1">Caixa Rápido (Hoje)</span>
-                        <p className="text-2xl font-black text-emerald-500">R$ {operationalDashboardMetrics.totalTodayRevenue.toFixed(2)}</p>
+                        <p className="text-xl lg:text-2xl font-black text-emerald-500">R$ {operationalDashboardMetrics.totalTodayRevenue.toFixed(2)}</p>
                         <p className="text-[11px] opacity-70 mt-1">Entradas em serviços e produtos de hoje</p>
                       </div>
 
-                      <div className={`p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm ${cardBgClass}`}>
                         <span className="text-xs font-bold uppercase tracking-wider opacity-60 block mb-1">Alertas de Estoque</span>
-                        <p className="text-2xl font-black text-amber-500">{operationalDashboardMetrics.lowStockItems.length} <span className="text-xs opacity-60">produtos críticos</span></p>
+                        <p className="text-xl lg:text-2xl font-black text-amber-500">{operationalDashboardMetrics.lowStockItems.length} <span className="text-xs opacity-60">produtos críticos</span></p>
                         <p className="text-[11px] opacity-70 mt-1">Abaixo do nível mínimo recomendado</p>
                       </div>
                     </div>
@@ -1513,7 +1540,7 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {visibleWidgets.teamProductivity && (
-                      <div className={`p-5 rounded-2xl border shadow-sm space-y-3 ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm space-y-3 ${cardBgClass}`}>
                         <h3 className="font-bold text-sm flex items-center gap-2 border-b pb-2"><Briefcase size={17} className="text-pink-600" /><span>Produtividade da Equipe Hoje</span></h3>
                         {operationalDashboardMetrics.teamPerformance.length === 0 ? (
                           <p className="text-xs opacity-60 py-4 text-center">Nenhum profissional registrado.</p>
@@ -1534,7 +1561,7 @@ export default function Home() {
                     )}
 
                     {visibleWidgets.stockAlerts && (
-                      <div className={`p-5 rounded-2xl border shadow-sm space-y-3 ${cardBgClass}`}>
+                      <div className={`p-4 lg:p-5 rounded-2xl border shadow-sm space-y-3 ${cardBgClass}`}>
                         <h3 className="font-bold text-sm flex items-center gap-2 border-b pb-2"><Boxes size={17} className="text-amber-500" /><span>Produtos Críticos em Estoque</span></h3>
                         {operationalDashboardMetrics.lowStockItems.length === 0 ? (
                           <p className="text-xs opacity-60 py-4 text-center">Estoque regular, nenhum alerta crítico.</p>
@@ -1562,14 +1589,14 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden ${cardBgClass}`}>
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <h3 className="font-bold text-slate-900 text-sm">Agenda de Atendimentos</h3>
-                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(employees[0]?.name || ""); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
+                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
                     </div>
                     {filteredAppointments.length === 0 ? (
                       <div className="p-12 text-center opacity-60 text-xs">Nenhum agendamento marcado.</div>
                     ) : (
                       <div className="divide-y divide-slate-100">
                         {filteredAppointments.map((item: any) => (
-                          <div key={item.id} className="p-4 flex justify-between items-center">
+                          <div key={item.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                             <div className="flex items-center gap-4">
                               <span className="font-black text-sm bg-slate-100 text-slate-900 px-3 py-1.5 rounded-xl">{item.time}</span>
                               <div>
@@ -1578,7 +1605,7 @@ export default function Home() {
                                 {item.notes ? <p className="text-[11px] opacity-60 italic">Obs: {item.notes}</p> : null}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
                               <button onClick={() => { 
                                 setEditingId(item.id); 
                                 setApptClientName(item.clientName); 
@@ -1621,7 +1648,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <h3 className="font-bold text-base">Serviços & Preços</h3>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {services.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum serviço.</p> : services.map(s => <div key={s.id} className="py-2.5 flex justify-between items-center"><div><strong>{s.name}</strong> ({s.duration} min) • Função: <span className="text-indigo-600 font-bold">{s.assignedRole || "Geral"}</span> • <span className="font-black text-pink-600">R$ {Number(s.price).toFixed(2)}</span></div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setFormName(s.name); setFormCategory(s.category || "Cabelos"); setFormDuration(s.duration || 30); setFormPrice(s.price); setServiceAssignedRole(s.assignedRole || rolesList[0] || "Cabeleireiro"); setModalType("service"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Serviço"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir serviço?")) return; recordSystemLog(`Excluiu o serviço ${s.name}`); const updated = services.filter(item => item.id !== s.id); setServices(updated); saveTenantData("services", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {services.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum serviço.</p> : services.map(s => <div key={s.id} className="py-2.5 flex justify-between items-center"><div><strong>{s.name}</strong> ({s.duration} min) • Função: <span className="text-indigo-600 font-bold">{s.assignedRole || "Geral"}</span> • <span className="font-black text-pink-600">R$ {Number(s.price).toFixed(2)}</span></div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(s.id); setFormName(s.name); setFormCategory(s.category || "Geral"); setFormDuration(s.duration || 30); setFormPrice(s.price); setServiceAssignedRole(s.assignedRole || rolesList[0] || "Profissional Principal"); setModalType("service"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Serviço"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir serviço?")) return; recordSystemLog(`Excluiu o serviço ${s.name}`); const updated = services.filter(item => item.id !== s.id); setServices(updated); saveTenantData("services", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1681,7 +1708,7 @@ export default function Home() {
                               </span>
                               {isManager && (
                                 <div className="flex items-center gap-1">
-                                  <button onClick={() => { setEditingId(p.id); setFormName(p.name); setFormCategory(p.category || "Cabelos"); setFormCost(p.cost || 10); setFormPrice(p.price); setFormDuration(p.initialStock || p.currentStock); setFormMinStock(p.minStockLimit); setModalType("product"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Produto"><Pencil size={14} /></button>
+                                  <button onClick={() => { setEditingId(p.id); setFormName(p.name); setFormCategory(p.category || "Geral"); setFormCost(p.cost || 10); setFormPrice(p.price); setFormDuration(p.initialStock || p.currentStock); setFormMinStock(p.minStockLimit); setModalType("product"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar Produto"><Pencil size={14} /></button>
                                   <button onClick={() => { if (!confirm("Excluir produto?")) return; recordSystemLog(`Excluiu o produto ${p.name}`); const updated = products.filter(item => item.id !== p.id); setProducts(updated); saveTenantData("products", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir Produto"><Trash2 size={14} /></button>
                                 </div>
                               )}
@@ -1710,7 +1737,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Cabeleireiro"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Cabeleireiro"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -2499,7 +2526,7 @@ export default function Home() {
               saveTenantData("rolesList", updated);
               setNewRoleName("");
             }} className="flex gap-2 pt-2 border-t">
-              <input placeholder="Nova função (ex: Barbeiro)" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1 border p-2.5 rounded-xl outline-none" />
+              <input placeholder="Nova função (ex: Especialista)" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1 border p-2.5 rounded-xl outline-none" />
               <button type="submit" className={`bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl cursor-pointer`}>+ Adicionar</button>
             </form>
           </div>
@@ -2560,7 +2587,7 @@ export default function Home() {
 
               <div>
                 <label className="font-bold block mb-1">Observações do Atendimento</label>
-                <textarea rows={3} placeholder="Ex: Cliente pediu corte em camadas..." value={finalizeNotes} onChange={e => setFinalizeNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" />
+                <textarea rows={3} placeholder="Observações..." value={finalizeNotes} onChange={e => setFinalizeNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" />
               </div>
 
               <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow">
@@ -2604,7 +2631,7 @@ export default function Home() {
               }
               setIsApptModalOpen(false);
             }} className="space-y-3">
-              <div><label className="font-bold block mb-1">Nome da Cliente *</label><input required placeholder="Cliente" value={apptClientName} onChange={e => setApptClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+              <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={apptClientName} onChange={e => setApptClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1">Serviço *</label>
@@ -2638,7 +2665,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div><label className="font-bold block mb-1">Observações do Agendamento</label><textarea rows={2} placeholder="Ex: Chegar com 10 min de antecedência..." value={apptNotes} onChange={e => setApptNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+              <div><label className="font-bold block mb-1">Observações do Agendamento</label><textarea rows={2} placeholder="Observações..." value={apptNotes} onChange={e => setApptNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Agendamento</button>
             </form>
           </div>
@@ -2667,7 +2694,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Serviço *</label><input required placeholder="Corte" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Nome do Serviço *</label><input required placeholder="Nome do serviço" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Categoria</label><input value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                   <div>
@@ -2702,7 +2729,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Produto *</label><input required placeholder="Shampoo" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Nome do Produto *</label><input required placeholder="Nome do produto" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div className="grid grid-cols-2 gap-2"><div><label className="font-bold block mb-1">Custo (R$)</label><input type="number" step="0.01" value={formCost} onChange={e => setFormCost(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div><div><label className="font-bold block mb-1">Venda (R$)</label><input type="number" step="0.01" value={formPrice} onChange={e => setFormPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Estoque Inicial *</label><input type="number" required value={formDuration} onChange={e => setFormDuration(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
@@ -2777,7 +2804,7 @@ export default function Home() {
             {modalType === "employee" && (
               <form onSubmit={e => {
                 e.preventDefault();
-                const primaryRole = empRoles[0] || rolesList[0] || "Cabeleireiro";
+                const primaryRole = empRoles[0] || rolesList[0] || "Profissional Principal";
                 if (editingId) {
                   const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
                   setEmployees(updated);
@@ -2804,8 +2831,8 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome Completo *</label><input required placeholder="Mariana" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(19) 99999-9999" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Nome Completo *</label><input required placeholder="Nome do colaborador" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 
                 <div>
                   <label className="font-bold block mb-1">Cargo no Sistema (Gestor ou Colaborador) *</label>
@@ -2839,7 +2866,7 @@ export default function Home() {
                 {!editingId && (
                   <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
                     <span className="font-bold text-indigo-600 block">Acesso de Login (E-mail e Senha):</span>
-                    <input type="email" placeholder="funcionario@email.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                    <input type="email" placeholder="email@empresa.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
                     <input type="password" placeholder="Senha inicial" value={empPass} onChange={e => setEmpPass(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
                   </div>
                 )}
@@ -2864,9 +2891,9 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Ana" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(19) 99999-9999" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Preferências, alergias..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+                <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Cliente</button>
               </form>
             )}
@@ -2899,7 +2926,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Descrição *</label><input required placeholder="Aluguel, Luz..." value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Descrição *</label><input required placeholder="Descrição da despesa" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Categoria *</label><input required placeholder="Operacional" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                   <div><label className="font-bold block mb-1">Valor (R$) *</label><input type="number" step="0.01" required value={formAmount} onChange={e => setFormAmount(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
@@ -2931,7 +2958,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome da Promoção *</label><input required placeholder="Super Terça" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Nome da Promoção *</label><input required placeholder="Título da promoção" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 
                 <div>
                   <label className="font-bold block mb-1">Selecionar Serviços e Produtos (Múltipla Escolha)</label>
@@ -2986,7 +3013,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Cliente *</label><input required value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <div><label className="font-bold block mb-1">Cliente *</label><input required placeholder="Nome do cliente" value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Serviço</label><select value={formServiceName} onChange={e => { setFormServiceName(e.target.value); const s = services.find(srv => srv.name === e.target.value); if (s) setFormGrossValue(s.price); }} className="w-full border p-2.5 rounded-xl bg-white">{services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}</select></div>
                   <div>
@@ -3012,7 +3039,7 @@ export default function Home() {
                     </select>
                   </div>
                 </div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
+                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Atendimento</button>
               </form>
             )}
