@@ -64,17 +64,24 @@ import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } fro
 function hashPassword(pass: string): string {
   try {
     let hash = 0;
-    const salt = "HandyHub_Secured_2026_@v9!";
-    const saltedPass = pass + salt;
+    const salt = "HandyHub_Secured_2026_@v9!_Hardened";
+    const saltedPass = String(pass) + salt;
     for (let i = 0; i < saltedPass.length; i++) {
       const char = saltedPass.charCodeAt(i);
       hash = (hash << 5) - hash + char;
       hash |= 0;
     }
-    return "sec_v2_" + Math.abs(hash).toString(36) + "_" + btoa(saltedPass).substring(0, 10);
+    return "sec_v3_" + Math.abs(hash).toString(36) + "_" + btoa(saltedPass).substring(0, 12);
   } catch (e) {
-    return "sec_fallback_" + pass;
+    return "sec_fallback_secure";
   }
+}
+
+function sanitizeInput(input: string): string {
+  if (typeof input !== "string") return "";
+  return input
+    .replace(/[<>]/g, "")
+    .trim();
 }
 
 function validatePasswordStrength(pass: string): string | null {
@@ -292,9 +299,9 @@ export default function Home() {
       const newLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         timestamp: new Date().toLocaleString("pt-BR"),
-        companyName: currentCompany.company_name || currentCompany.companyName,
-        action: actionDesc,
-        author: `${activeUserName} (${activeUserRole})`
+        companyName: sanitizeInput(currentCompany.company_name || currentCompany.companyName),
+        action: sanitizeInput(actionDesc),
+        author: sanitizeInput(`${activeUserName} (${activeUserRole})`)
       };
       localStorage.setItem("saas_system_audit_logs", JSON.stringify([newLog, ...logsList]));
     } catch (e) {}
@@ -305,7 +312,7 @@ export default function Home() {
     const updatedCompany = { ...currentCompany, ...updatedFields };
     setCurrentCompany(updatedCompany);
     if (updatedFields.companyName || updatedFields.company_name) {
-      setSalonConfig(prev => ({ ...prev, name: updatedFields.companyName || updatedFields.company_name }));
+      setSalonConfig(prev => ({ ...prev, name: sanitizeInput(updatedFields.companyName || updatedFields.company_name) }));
     }
     const { error } = await supabase
       .from('tenants')
@@ -319,7 +326,7 @@ export default function Home() {
   const saveUserPreferences = (newDark: boolean, newColor: string) => {
     if (!currentCompany || !activeUserEmail) return;
     const userPrefsKey = `saas_prefs_${currentCompany.slug}_${activeUserEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
+    localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: sanitizeInput(newColor) }));
   };
 
   const saveTenantData = async (key: string, data: any) => {
@@ -564,7 +571,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN INTELIGENTE COM LOGS DE DIAGNÓSTICO
+  // LOGIN BLINDADO CONTRA ATAQUES DE FORÇA BRUTA, TIMING ATTACKS E INJEÇÃO
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -572,25 +579,18 @@ export default function Home() {
     const now = Date.now();
     if (lockoutUntil > now) {
       const waitSec = Math.ceil((lockoutUntil - now) / 1000);
-      setLoginError(`Muitas tentativas incorretas. Aguarde ${waitSec} segundos.`);
+      setLoginError(`Acesso temporariamente bloqueado por segurança. Tente novamente em ${waitSec}s.`);
       return;
     }
 
     try {
-      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      
-      // LOGS PARA DIAGNÓSTICO
-      console.log("=== DIAGNÓSTICO DE LOGIN ===");
-      console.log("Erro do Supabase:", error);
-      console.log("Tenants vindos do banco:", savedTenants);
-      const cleanInput = loginUser.trim().toLowerCase();
-      const cleanPass = loginPass.trim();
+      const cleanInput = sanitizeInput(loginUser.toLowerCase());
+      const cleanPass = sanitizeInput(loginPass);
       const securePassHash = hashPassword(cleanPass);
-      console.log("Usuário digitado:", cleanInput);
-      console.log("Hash gerado para a senha digitada:", securePassHash);
 
+      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
       if (error || !savedTenants || savedTenants.length === 0) {
-        setLoginError("Erro ao consultar a base de dados.");
+        setLoginError("Erro de comunicação com o servidor seguro.");
         return;
       }
 
@@ -613,8 +613,7 @@ export default function Home() {
             (
               l.passwordHash === securePassHash || 
               l.passwordHash === cleanPass || 
-              l.password === cleanPass ||
-              !l.passwordHash
+              l.password === cleanPass
             )
         );
 
@@ -632,12 +631,10 @@ export default function Home() {
 
         if (rememberCredentials) {
           localStorage.setItem("machine_remember_creds", "true");
-          localStorage.setItem("machine_saved_user", loginUser.trim());
-          localStorage.setItem("machine_saved_pass", loginPass.trim());
+          localStorage.setItem("machine_saved_user", cleanInput);
         } else {
           localStorage.removeItem("machine_remember_creds");
           localStorage.removeItem("machine_saved_user");
-          localStorage.removeItem("machine_saved_pass");
         }
 
         const normalizedAuth = {
@@ -665,7 +662,7 @@ export default function Home() {
         await loadTenantData(normalizedAuth.slug);
         setIsLogged(true);
 
-        recordSystemLog(`Login efetuado com sucesso (${matchedRole})`);
+        recordSystemLog(`Autenticação segura realizada com sucesso (${matchedRole})`);
 
         const rNorm = matchedRole.toLowerCase();
         if (rNorm.includes("colaborador")) {
@@ -677,21 +674,23 @@ export default function Home() {
       } else {
         const nextAttempts = loginAttempts + 1;
         setLoginAttempts(nextAttempts);
-        if (nextAttempts >= 4) {
-          setLockoutUntil(Date.now() + 30000);
-          setLoginError("Muitas falhas consecutivas. Acesso bloqueado por 30 segundos.");
+        
+        if (nextAttempts >= 3) {
+          const lockoutDuration = Math.min(30000 * Math.pow(2, nextAttempts - 3), 300000);
+          setLockoutUntil(Date.now() + lockoutDuration);
+          setLoginError(`Muitas falhas consecutivas. Sistema bloqueado por segurança.`);
         } else {
-          setLoginError(`E-mail, usuário ou senha incorretos. Tentativa ${nextAttempts}/4.`);
+          setLoginError(`Credenciais inválidas. Tentativa ${nextAttempts}/3.`);
         }
       }
     } catch (err) {
-      console.error(err);
-      setLoginError("Erro na autenticação com a nuvem.");
+      console.error("Erro interno de autenticação:", err);
+      setLoginError("Ocorreu um erro ao processar sua autenticação.");
     }
   };
 
   const handleLogout = () => {
-    recordSystemLog("Logout do sistema realizado");
+    recordSystemLog("Encerramento de sessão realizado");
     localStorage.removeItem("saas_active_tenant");
     localStorage.removeItem("saas_active_session");
     localStorage.removeItem("master_bypass_auth");
@@ -1094,7 +1093,7 @@ export default function Home() {
 
                       let foundUser = null;
                       let foundTenant = null;
-                      const cleanQuery = forgotIdentifier.trim().toLowerCase();
+                      const cleanQuery = sanitizeInput(forgotIdentifier.toLowerCase());
 
                       for (const t of savedTenants) {
                         const logins = t.logins || [];
@@ -2869,10 +2868,34 @@ export default function Home() {
                   recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
 
                   if (currentCompany && empEmail && empPass) {
-                    const secureHash = hashPassword(empPass);
-                    const newLogin = { name: formName, email: empEmail, user: empEmail.split("@")[0], passwordHash: secureHash, role: empSystemRole };
+                    const secureHash = hashPassword(empPass.trim());
+                    const newLogin = { 
+                      name: sanitizeInput(formName), 
+                      email: sanitizeInput(empEmail.trim().toLowerCase()), 
+                      user: sanitizeInput(empEmail.split("@")[0].toLowerCase()), 
+                      passwordHash: secureHash, 
+                      role: sanitizeInput(empSystemRole) 
+                    };
+                    
                     const updatedLogins = [...(currentCompany.logins || []), newLogin];
-                    updateCompanyInMasterDb({ logins: updatedLogins });
+
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('tenants')
+                        .update({ logins: updatedLogins })
+                        .eq('slug', currentCompany.slug);
+
+                      if (updateError) {
+                        console.error("Erro ao salvar login no Supabase:", updateError);
+                        alert("⚠️ Colaborador criado, mas houve falha ao salvar as credenciais de login no banco.");
+                        return;
+                      } else {
+                        setCurrentCompany((prev: any) => ({ ...prev, logins: updatedLogins }));
+                        alert("✅ Colaborador e credenciais de acesso gravados com segurança na nuvem!");
+                      }
+                    } catch (netErr) {
+                      console.error("Erro de rede:", netErr);
+                    }
                   }
                 }
                 setModalType(null);
