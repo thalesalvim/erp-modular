@@ -170,7 +170,7 @@ export default function Home() {
 
   const [darkMode, setDarkMode] = useState(false);
 
-  // Estados para alteração de senha robusta (suporta modo normal e Master Bypass)
+  // Estados para alteração de senha segura
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
@@ -570,7 +570,6 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // LOGIN BLINDADO ROBUSTO COM SUPORTE A SUPABASE AUTH E FALLBACK DE COMPATIBILIDADE PARA TENANTS
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -700,7 +699,7 @@ export default function Home() {
 
   const isModuleAllowedForCurrentPlan = (tabId: string) => {
     if (!currentCompany) return true;
-    if (tabId === "settings" || tabId === "my_schedule") {
+    if (tabId === "settings" || tabId === "my_schedule" || tabId === "dre") {
       return true;
     }
     if (tabId === "my_plan") {
@@ -709,22 +708,14 @@ export default function Home() {
 
     const pName = (currentCompany.planName || currentCompany.plan_name || "").toLowerCase();
     const isBasic = pName.includes("básico") || pName.includes("basico");
-    const isPro = pName.includes("pro");
 
-    if (isBasic && ["promotions", "expenses", "team", "dre"].includes(tabId)) {
-      return false;
-    }
-    if (isPro && ["dre"].includes(tabId)) {
+    if (isBasic && ["promotions", "expenses", "team"].includes(tabId)) {
       return false;
     }
 
     const allowedMods = currentCompany.allowedModules || currentCompany.allowed_modules || {};
     if (allowedMods[tabId] === false) {
       return false;
-    }
-
-    if (tabId === "dre") {
-      return hasDREAccess;
     }
 
     return allowedMods[tabId] ?? true;
@@ -1351,11 +1342,6 @@ export default function Home() {
               <button
                 key={tab.id}
                 onClick={() => {
-                  if (tab.id === "dre" && !hasDREAccess) {
-                    setActiveTab("my_plan");
-                    setIsMobileMenuOpen(false);
-                    return;
-                  }
                   setActiveTab(tab.id);
                   setIsMobileMenuOpen(false);
                 }}
@@ -2390,14 +2376,14 @@ export default function Home() {
         </div>
       </main>
 
-      {/* MODAL DISCRETO DE ALTERAÇÃO DE SENHA (DUPLO SUPORTE: AUTH OU FALLBACK TENANT) */}
+      {/* MODAL DISCRETO DE ALTERAÇÃO DE SENHA */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
             <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex justify-between items-center">
               <h2 className="text-base font-bold flex items-center gap-2">
                 <Shield size={18} className="text-indigo-600 dark:text-indigo-400" />
-                <span>Alterar Palavra-Passe de Acesso</span>
+                <span>Alterar Senha de Acesso</span>
               </h2>
               <button onClick={() => setIsPasswordModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
@@ -2423,12 +2409,10 @@ export default function Home() {
               try {
                 const newHash = hashPassword(newPasswordInputSettings.trim());
                 
-                // Tenta atualizar via Supabase Auth
-                const { error: authErr } = await supabase.auth.updateUser({
+                await supabase.auth.updateUser({
                   password: newPasswordInputSettings.trim()
                 });
 
-                // Se houver falha (ex: acesso via Master Bypass), atualiza diretamente na tabela tenants com segurança robusta
                 const { data: tenantData } = await supabase.from('tenants').select('*').eq('slug', currentCompany.slug).single();
                 if (tenantData) {
                   let loginsList = tenantData.logins || [];
@@ -2863,7 +2847,12 @@ export default function Home() {
       {modalType && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
-            <div className="border-b pb-3 flex justify-between items-center"><h2 className="text-base font-bold capitalize">{editingId ? `Editar ${modalType}` : `Cadastrar ${modalType}`}</h2><button onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button></div>
+            <div className="border-b pb-3 flex justify-between items-center">
+              <h2 className="text-base font-bold capitalize">
+                {editingId ? `Editar ${modalType === 'employee' ? 'Colaborador' : modalType === 'service' ? 'Serviço' : modalType === 'product' ? 'Produto' : modalType === 'sale' ? 'Venda' : modalType === 'customer' ? 'Cliente' : modalType === 'expense' ? 'Despesa' : modalType === 'promotion' ? 'Promoção' : modalType}` : `Cadastrar ${modalType === 'employee' ? 'Colaborador' : modalType === 'service' ? 'Serviço' : modalType === 'product' ? 'Produto' : modalType === 'sale' ? 'Venda' : modalType === 'customer' ? 'Cliente' : modalType === 'expense' ? 'Despesa' : modalType === 'promotion' ? 'Promoção' : modalType}`}
+              </h2>
+              <button onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
 
             {modalType === "service" && (
               <form onSubmit={e => {
@@ -2999,12 +2988,31 @@ export default function Home() {
                   setEmployees(updated);
                   saveTenantData("employees", updated);
                   recordSystemLog(`Editou colaborador: ${formName} (${empSystemRole})`);
+
+                  if (currentCompany && currentCompany.logins) {
+                    const updatedLogins = currentCompany.logins.map((l: any) => l.name === formName ? { ...l, role: empSystemRole } : l);
+                    updateCompanyInMasterDb({ logins: updatedLogins });
+                  }
                 } else {
                   const newEmp = { id: `e-${Date.now()}`, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
                   const updated = [...employees, newEmp];
                   setEmployees(updated);
                   saveTenantData("employees", updated);
                   recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
+
+                  if (currentCompany && empEmail && empPass) {
+                    const secureHash = hashPassword(empPass.trim());
+                    const newLogin = { 
+                      name: sanitizeInput(formName), 
+                      email: sanitizeInput(empEmail.trim().toLowerCase()), 
+                      user: sanitizeInput(empEmail.split("@")[0].toLowerCase()), 
+                      passwordHash: secureHash, 
+                      role: sanitizeInput(empSystemRole) 
+                    };
+                    
+                    const updatedLogins = [...(currentCompany.logins || []), newLogin];
+                    await updateCompanyInMasterDb({ logins: updatedLogins });
+                  }
                 }
                 setModalType(null);
               }} className="space-y-3">
@@ -3040,6 +3048,13 @@ export default function Home() {
                   </div>
                 </div>
 
+                {!editingId && (
+                  <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
+                    <span className="font-bold text-indigo-600 block">Acesso de Login (E-mail e Senha):</span>
+                    <input type="email" placeholder="email@empresa.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                    <input type="password" placeholder="Senha inicial" value={empPass} onChange={e => setEmpPass(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                  </div>
+                )}
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Colaborador</button>
               </form>
             )}
