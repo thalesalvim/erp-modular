@@ -3101,7 +3101,7 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <input type="time" value={day.openTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, openTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                       <span>às</span>
-                      <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeScale => EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
+                      <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                     </div>
                   )}
                 </div>
