@@ -387,7 +387,7 @@ export default function Home() {
     setIsMounted(true);
     const initializeApp = async () => {
       const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || "unidade-padrao";
+      const slugParam = params.get("c");
       const masterBypassParam = params.get("master_bypass");
       const storedBypass = localStorage.getItem("master_bypass_auth");
       const bypassLoginName = localStorage.getItem("master_bypass_login_name");
@@ -397,19 +397,30 @@ export default function Home() {
       
       let found = null;
       if (!error && savedTenants && savedTenants.length > 0) {
-        found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0];
+        if (slugParam) {
+          found = savedTenants.find((t: any) => t.slug === slugParam);
+        }
+        if (!found) {
+          const lastActiveSlug = localStorage.getItem("saas_last_active_slug");
+          if (lastActiveSlug) {
+            found = savedTenants.find((t: any) => t.slug === lastActiveSlug);
+          }
+        }
+        if (!found) {
+          found = savedTenants[0];
+        }
       }
 
       if (!found) {
         found = {
-          slug: "unidade-padrao",
-          company_name: "Empresa Exemplo LTDA",
+          slug: "studio-hair",
+          company_name: "Studio Hair & Beauty",
           status: "Ativo",
           planName: "Pro",
-          owner_name: "Gestor Principal",
-          owner_email: "gestor@empresa.com",
+          owner_name: "Gisele Alvim",
+          owner_email: "gisele@gmail.com",
           logins: [
-            { user: "gestor", email: "gestor@empresa.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gestor Principal" }
+            { user: "gisele", email: "gisele@gmail.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gisele Alvim" }
           ]
         };
       }
@@ -424,7 +435,8 @@ export default function Home() {
         };
 
         setCurrentCompany(normalizedFound);
-        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Empresa Exemplo LTDA" }));
+        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Studio Hair & Beauty" }));
+        localStorage.setItem("saas_last_active_slug", normalizedFound.slug);
         
         if (normalizedFound.status === "Bloqueado") {
           setIsTenantBlocked(true);
@@ -437,9 +449,9 @@ export default function Home() {
 
         if (masterBypassParam && storedBypass && masterBypassParam === storedBypass) {
           setIsMasterBypassActive(true);
-          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gestor Principal");
+          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gestor");
           setActiveUserRole(bypassLoginRole || "Dono");
-          setActiveUserEmail(normalizedFound.owner_email || "gestor@empresa.com");
+          setActiveUserEmail(normalizedFound.owner_email || "");
           setIsLogged(true);
           setActiveTab("dashboard");
           recordSystemLog("Acesso Master Support Mode Ativado com Segurança");
@@ -477,7 +489,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const currentSlug = currentCompany?.slug || "unidade-padrao";
+    const currentSlug = currentCompany?.slug;
     if (!currentSlug) return;
 
     const interval = setInterval(async () => {
@@ -552,7 +564,7 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  // Função de login ultra-robusta com verificação em todas as propriedades de login e fallback automático
+  // LOGIN INTELIGENTE COM DETECÇÃO AUTOMÁTICA DE TENANT POR E-MAIL/USUÁRIO
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -566,7 +578,10 @@ export default function Home() {
 
     try {
       const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      const tenantsList = (!error && savedTenants && savedTenants.length > 0) ? savedTenants : [currentCompany];
+      if (error || !savedTenants || savedTenants.length === 0) {
+        setLoginError("Erro ao consultar a base de dados.");
+        return;
+      }
 
       let authCompany = null;
       let matchedRole = "Gestor";
@@ -577,8 +592,8 @@ export default function Home() {
       const cleanPass = loginPass.trim();
       const securePassHash = hashPassword(cleanPass);
 
-      for (const tenant of tenantsList) {
-        if (!tenant) continue;
+      for (const tenant of savedTenants) {
+        if (!tenant || tenant.status === "Bloqueado") continue;
         const tenantLogins = tenant.logins || [];
         const match = tenantLogins.find(
           (l: any) =>
@@ -591,24 +606,20 @@ export default function Home() {
               l.passwordHash === cleanPass || 
               l.passwordHash === securePassHash || 
               l.password === cleanPass ||
-              !l.passwordHash // fallback se o hash estiver vazio
+              !l.passwordHash
             )
         );
+
         if (match) {
           authCompany = tenant;
           matchedRole = match.role || "Gestor";
-          matchedName = match.name || tenant.owner_name || tenant.ownerName || "Usuário";
+          matchedName = match.name || tenant.owner_name || "Usuário";
           matchedEmail = match.email || match.user || cleanInput;
           break;
         }
       }
 
       if (authCompany) {
-        if (authCompany.status === "Bloqueado") {
-          setIsTenantBlocked(true);
-          return;
-        }
-
         setLoginAttempts(0);
 
         if (rememberCredentials) {
@@ -640,6 +651,7 @@ export default function Home() {
           role: matchedRole,
           email: matchedEmail
         }));
+        localStorage.setItem("saas_last_active_slug", normalizedAuth.slug);
 
         setSalonConfig(prev => ({ ...prev, name: normalizedAuth.companyName }));
         await loadTenantData(normalizedAuth.slug);
@@ -661,7 +673,7 @@ export default function Home() {
           setLockoutUntil(Date.now() + 30000);
           setLoginError("Muitas falhas consecutivas. Acesso bloqueado por 30 segundos.");
         } else {
-          setLoginError(`Usuário, e-mail ou senha incorretos. Tentativa ${nextAttempts}/4.`);
+          setLoginError(`E-mail, usuário ou senha incorretos. Tentativa ${nextAttempts}/4.`);
         }
       }
     } catch (err) {
@@ -976,7 +988,7 @@ export default function Home() {
                 required
                 value={loginUser}
                 onChange={e => setLoginUser(e.target.value)}
-                placeholder="ex: usuario_exemplo"
+                placeholder="ex: seu.email@empresa.com"
                 className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
               />
             </div>
@@ -2812,8 +2824,25 @@ export default function Home() {
             )}
 
             {modalType === "employee" && (
-              <form onSubmit={e => {
+              <form onSubmit={async e => {
                 e.preventDefault();
+                
+                // Validação de E-mail Único na base de dados antes de cadastrar
+                const checkEmail = empEmail.trim().toLowerCase();
+                try {
+                  const { data: allTenants } = await supabase.from('tenants').select('*');
+                  if (allTenants) {
+                    for (const t of allTenants) {
+                      const lgs = t.logins || [];
+                      const exists = lgs.some((l: any) => l.email?.toLowerCase() === checkEmail || l.user?.toLowerCase() === checkEmail);
+                      if (exists) {
+                        alert("Este e-mail já está cadastrado no sistema. Entre em contato com o suporte para ajustar.");
+                        return;
+                      }
+                    }
+                  }
+                } catch (err) {}
+
                 const primaryRole = empRoles[0] || rolesList[0] || "Profissional Principal";
                 if (editingId) {
                   const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
@@ -3079,7 +3108,7 @@ export default function Home() {
               ))}
             </div>
             <div className="pt-2 border-t flex justify-end">
-              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluirティブ</button>
+              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir</button>
             </div>
           </div>
         </div>
