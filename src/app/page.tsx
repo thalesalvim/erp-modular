@@ -3107,7 +3107,7 @@ export default function Home() {
                   {day.isWorking && (
                     <div className="flex items-center gap-2">
                       <input type="time" value={day.openTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, openTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
-      <span>às</span>
+                      <span>às</span>
                       <input type="time" value={day.closeTime} onChange={e => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, closeTime: e.target.value } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className="border rounded p-1" />
                     </div>
                   )}
@@ -3115,7 +3115,7 @@ export default function Home() {
               ))}
             </div>
             <div className="pt-2 border-t flex justify-end">
-              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir">Concluir</button>
+              <button onClick={() => setSelectedEmpForSchedule(null)} className="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl cursor-pointer">Concluir</button>
             </div>
           </div>
         </div>
