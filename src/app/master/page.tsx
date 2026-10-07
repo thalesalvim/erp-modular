@@ -185,6 +185,23 @@ const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
   }
 };
 
+const MODULE_NAMES_LIST = [
+  { id: "dashboard", label: "Dashboard Geral" },
+  { id: "calendar", label: "Agenda de Horários" },
+  { id: "atendimentos", label: "Atendimentos" },
+  { id: "services", label: "Serviços & Preços" },
+  { id: "promotions", label: "Promoções & Descontos" },
+  { id: "pos", label: "Vendas de Balcão (PDV)" },
+  { id: "stock", label: "Estoque & Produtos" },
+  { id: "expenses", label: "Despesas Operacionais" },
+  { id: "team", label: "Equipe de Colaboradores" },
+  { id: "customers", label: "Base de Clientes" },
+  { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra)" },
+  { id: "settings", label: "Configurações Gerais" }
+];
+
+const AVAILABLE_ROLES_LIST: Array<"Dono" | "Gestor" | "Colaborador"> = ["Dono", "Gestor", "Colaborador"];
+
 export default function MasterPanel() {
   const [isMounted, setIsMounted] = useState(false);
   const [isMasterAuth, setIsMasterAuth] = useState(() => {
@@ -621,7 +638,7 @@ export default function MasterPanel() {
 
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
-    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\Digite o nome exato da empresa para confirmar:`);
+    const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\nDigite o nome exato da empresa para confirmar:`);
     
     if (confirmName !== selectedTenant.companyName) {
       alert("Nome incorreto. A exclusão foi cancelada.");
@@ -814,16 +831,15 @@ export default function MasterPanel() {
 
     const cleanEmail = loginEmail.trim().toLowerCase();
 
-    // Validação de unicidade do e-mail na base de dados
     try {
       const { data: allTenants } = await supabase.from('tenants').select('*');
       if (allTenants) {
         for (const t of allTenants) {
-          if (t.slug === selectedTenant.slug) continue; // Ignora a própria empresa ao editar
+          if (t.slug === selectedTenant.slug) continue;
           const lgs = t.logins || [];
           const exists = lgs.some((l: any) => l.email?.toLowerCase() === cleanEmail || l.user?.toLowerCase() === cleanEmail);
           if (exists) {
-            alert("Este e-mail já está cadastrado no sistema. Entre em contato com o suporte para ajustar.");
+            alert("Este e-mail já está cadastrado no sistema.");
             return;
           }
         }
@@ -915,7 +931,6 @@ export default function MasterPanel() {
     const checkEmail = newEmail.trim().toLowerCase();
     const initialUser = newInitialUser.trim().toLowerCase();
 
-    // Validação global de unicidade do e-mail ao criar empresa
     try {
       const { data: allTenants } = await supabase.from('tenants').select('*');
       if (allTenants) {
@@ -923,7 +938,7 @@ export default function MasterPanel() {
           const lgs = t.logins || [];
           const exists = lgs.some((l: any) => l.email?.toLowerCase() === checkEmail || l.user?.toLowerCase() === checkEmail);
           if (exists) {
-            setModalError("❌ Este e-mail já está cadastrado no sistema. Entre em contato com o suporte para ajustar.");
+            setModalError("❌ Este e-mail já está cadastrado no sistema.");
             return;
           }
         }
@@ -1013,57 +1028,6 @@ export default function MasterPanel() {
     setFeedbackMsg(`Empresa "${formatted.companyName}" criada com sucesso!`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
-
-  if (!isMounted) return <div className="min-h-screen bg-slate-950" />;
-
-  if (!isMasterAuth) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
-        <div className="w-full max-w-md bg-slate-900 border border-indigo-500/40 rounded-3xl p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 mb-1">
-              <ShieldCheck size={38} />
-            </div>
-            <h1 className="text-xl font-black text-white tracking-tight">Painel Master • Auditoria & Segurança</h1>
-            <p className="text-xs text-slate-400">Acesso protegido com criptografia e log de ações.</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4 text-xs">
-            <div>
-              <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">E-mail ou Usuário Master</label>
-              <input type="text" required value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="masterlogin" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500" />
-            </div>
-            <div>
-              <label className="text-slate-300 font-bold block mb-1 uppercase tracking-wider">Senha Criptografada</label>
-              <input type="password" required value={passInput} onChange={e => setPassInput(e.target.value)} placeholder="••••••••••" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500" />
-            </div>
-            {errorMsg && <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-center font-medium">{errorMsg}</div>}
-            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl uppercase tracking-wider transition shadow-lg cursor-pointer text-xs">Entrar em Ambiente Seguro</button>
-          </form>
-          <div className="pt-2 text-center border-t border-slate-800">
-            <Link href="/" className="text-xs text-slate-400 hover:text-white transition">← Voltar ao Login de Clientes</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const moduleNames = [
-    { id: "dashboard", label: "Dashboard Geral" },
-    { id: "calendar", label: "Agenda de Horários" },
-    { id: "atendimentos", label: "Atendimentos" },
-    { id: "services", label: "Serviços & Preços" },
-    { id: "promotions", label: "Promoções & Descontos" },
-    { id: "pos", label: "Vendas de Balcão (PDV)" },
-    { id: "stock", label: "Estoque & Produtos" },
-    { id: "expenses", label: "Despesas Operacionais" },
-    { id: "team", label: "Equipe de Colaboradoras" },
-    { id: "customers", label: "Base de Clientes" },
-    { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra)" },
-    { id: "settings", label: "Configurações Gerais" }
-  ];
-
-  const availableRolesList: Array<"Dono" | "Gestor" | "Colaborador"> = ["Dono", "Gestor", "Colaborador"];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -1256,7 +1220,7 @@ export default function MasterPanel() {
                     </div>
 
                     <div className="space-y-3">
-                      {moduleNames.map(m => {
+                      {MODULE_NAMES_LIST.map(m => {
                         const isEn = selectedTenant.allowedModules?.[m.id] ?? true;
                         const allowedRolesForMod = selectedTenant.moduleRoles?.[m.id] || ["Dono", "Gestor", "Colaborador"];
 
@@ -1275,7 +1239,7 @@ export default function MasterPanel() {
 
                             <div className="flex items-center gap-2 pt-2 border-t border-slate-900 text-[11px]">
                               <span className="text-slate-400 font-semibold mr-1">Cargos com acesso:</span>
-                              {availableRolesList.map(r => {
+                              {AVAILABLE_ROLES_LIST.map(r => {
                                 const hasRoleAccess = allowedRolesForMod.includes(r);
                                 return (
                                   <button
@@ -1461,7 +1425,7 @@ export default function MasterPanel() {
         </div>
       )}
 
-      {/* MODAL ADICIONAR / EDITAR LOGIN (CAMPOS GENÉRICOS) */}
+      {/* MODAL ADICIONAR / EDITAR LOGIN */}
       {isNewLoginModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
@@ -1492,7 +1456,7 @@ export default function MasterPanel() {
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Cargo *</label>
                 <select value={loginRole} onChange={e => setLoginRole(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
-                  {availableRolesList.map(r => <option key={r} value={r}>{r}</option>)}
+                  {AVAILABLE_ROLES_LIST.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Acesso</button>

@@ -170,7 +170,6 @@ export default function Home() {
 
   const [darkMode, setDarkMode] = useState(false);
 
-  // Estados para alteração de senha e e-mail
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
@@ -929,6 +928,26 @@ export default function Home() {
     return true;
   });
 
+  const getTabLabelInPortuguese = (tabId: string) => {
+    switch (tabId) {
+      case "dashboard": return "Dashboard Geral";
+      case "calendar": return "Agenda de Horários";
+      case "atendimentos": return "Atendimentos";
+      case "services": return "Serviços & Preços";
+      case "promotions": return "Promoções & Descontos";
+      case "pos": return "Vendas";
+      case "stock": return "Estoque & Alertas";
+      case "expenses": return "Despesas Operacionais";
+      case "team": return "Equipe de Colaboradores";
+      case "customers": return "Base de Clientes";
+      case "my_schedule": return "Meu Banco de Horas";
+      case "dre": return "DRE Gerencial";
+      case "my_plan": return "Meu Plano";
+      case "settings": return "Configurações";
+      default: return tabId.charAt(0).toUpperCase() + tabId.slice(1);
+    }
+  };
+
   if (!isLogged) {
     return (
       <div className="flex h-screen items-center justify-center font-sans bg-slate-950 text-slate-100 p-4 relative overflow-hidden">
@@ -1385,7 +1404,7 @@ export default function Home() {
           <div className="flex items-center gap-2 text-xs lg:text-sm opacity-80 pl-14">
             <span className="font-semibold truncate max-w-[120px] lg:max-w-none">{salonConfig.name}</span>
             <ChevronRight size={16} />
-            <span className="capitalize font-bold truncate max-w-[140px] lg:max-w-none">{activeTab === "my_schedule" ? "Meu Banco de Horas" : activeTab === "my_plan" ? "Meu Plano" : activeTab === "dre" ? "DRE Gerencial" : activeTab}</span>
+            <span className="capitalize font-bold truncate max-w-[140px] lg:max-w-none">{getTabLabelInPortuguese(activeTab)}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1423,7 +1442,7 @@ export default function Home() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 lg:p-8 pb-12">
-          {activeTab !== "settings" && !isModuleAllowedForCurrentPlan(activeTab) ? (
+          {activeTab !== "settings" && activeTab !== "dre" && !isModuleAllowedForCurrentPlan(activeTab) ? (
             <div className="max-w-xl mx-auto my-16 p-8 bg-slate-900 border border-amber-500/30 rounded-3xl text-center space-y-4">
               <div className="inline-flex p-4 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
                 <Lock size={36} />
@@ -2014,12 +2033,14 @@ export default function Home() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-12 text-center space-y-4">
+                    <div className="p-12 text-center space-y-4 max-w-lg mx-auto">
                       <div className="inline-flex p-4 bg-indigo-600/20 text-indigo-400 rounded-3xl border border-indigo-500/30">
                         <Lock size={40} />
                       </div>
                       <h3 className="text-lg font-black text-white">Módulo DRE Gerencial Exclusivo do Plano Ultra</h3>
-                      <p className="text-xs text-slate-400 max-w-md mx-auto">O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro. Faça upgrade para o Plano Ultra!</p>
+                      <p className="text-xs text-slate-400">
+                        O DRE automatizado e o resumo mensal avançado oferecem controle de ticket médio, curva ABC de produtos e margem de lucro real para impulsionar o seu negócio. Esse recurso estratégico está disponível apenas no Plano Ultra.
+                      </p>
                       <button onClick={() => setActiveTab("my_plan")} className={`${theme.buttonBg} text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow`}>
                         ✨ Conhecer o Plano Ultra
                       </button>
@@ -2257,7 +2278,7 @@ export default function Home() {
                         value={salonConfig.name}
                         className="w-full border border-slate-700 bg-slate-900/60 text-slate-400 p-2.5 rounded-xl outline-none cursor-not-allowed select-none font-bold"
                       />
-                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, entre em contato com o Suporte Handy.</span>
+                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, utilize a edição de clientes no Painel Master.</span>
                     </div>
                   )}
 
@@ -2302,7 +2323,7 @@ export default function Home() {
                       <div className="flex justify-between items-center">
                         <div>
                           <strong className="block">Logotipo ou Ícone do Ramo</strong>
-                          <span className="opacity-70">Escolha o símbolo de sua preferência ou envie uma imagem PNG própria.</span>
+                          <span className="opacity-70">Escolha o símbolo do seu ramo ou envie uma imagem PNG própria.</span>
                         </div>
                         <input
                           type="file"
@@ -2975,394 +2996,6 @@ export default function Home() {
               <div><label className="font-bold block mb-1">Observações do Agendamento</label><textarea rows={2} placeholder="Observações..." value={apptNotes} onChange={e => setApptNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
               <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Agendamento</button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {modalType && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
-            <div className="border-b pb-3 flex justify-between items-center">
-              <h2 className="text-base font-bold capitalize">
-                {editingId ? `Editar ${modalType === 'employee' ? 'Colaborador' : modalType === 'service' ? 'Serviço' : modalType === 'product' ? 'Produto' : modalType === 'sale' ? 'Venda' : modalType === 'customer' ? 'Cliente' : modalType === 'expense' ? 'Despesa' : modalType === 'promotion' ? 'Promoção' : modalType}` : `Cadastrar ${modalType === 'employee' ? 'Colaborador' : modalType === 'service' ? 'Serviço' : modalType === 'product' ? 'Produto' : modalType === 'sale' ? 'Venda' : modalType === 'customer' ? 'Cliente' : modalType === 'expense' ? 'Despesa' : modalType === 'promotion' ? 'Promoção' : modalType}`}
-              </h2>
-              <button onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
-            </div>
-
-            {modalType === "service" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = services.map(s => s.id === editingId ? { ...s, name: formName, category: formCategory, duration: Number(formDuration), price: Number(formPrice), assignedRole: serviceAssignedRole } : s);
-                  setServices(updated);
-                  saveTenantData("services", updated);
-                  recordSystemLog(`Editou o serviço ${formName}`);
-                } else {
-                  const newS = { id: `s-${Date.now()}`, name: formName, category: formCategory, duration: Number(formDuration), price: Number(formPrice), assignedRole: serviceAssignedRole };
-                  const updated = [...services, newS];
-                  setServices(updated);
-                  saveTenantData("services", updated);
-                  recordSystemLog(`Cadastrou novo serviço: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Serviço *</label><input required placeholder="Nome do serviço" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Categoria</label><input value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div>
-                    <label className="font-bold block mb-1">Atribuir à Função *</label>
-                    <select value={serviceAssignedRole} onChange={e => setServiceAssignedRole(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
-                      {rolesList.map((r, idx) => <option key={idx} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Duração (min)</label><input type="number" value={formDuration} onChange={e => setFormDuration(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div><label className="font-bold block mb-1">Preço (R$) *</label><input type="number" step="0.01" required value={formPrice} onChange={e => setFormPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
-                </div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Serviço</button>
-              </form>
-            )}
-
-            {modalType === "product" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = products.map(p => p.id === editingId ? { ...p, name: formName, category: formCategory, cost: Number(formCost), price: Number(formPrice), initialStock: Number(formDuration), minStock: Number(formMinStock) || 5 } : p);
-                  setProducts(updated);
-                  saveTenantData("products", updated);
-                  recordSystemLog(`Editou o produto ${formName}`);
-                } else {
-                  const newPr = { id: `pr-${Date.now()}`, name: formName, category: formCategory, cost: Number(formCost), price: Number(formPrice), initialStock: Number(formDuration), minStock: Number(formMinStock) || 5 };
-                  const updated = [...products, newPr];
-                  setProducts(updated);
-                  saveTenantData("products", updated);
-                  recordSystemLog(`Cadastrou novo produto: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Produto *</label><input required placeholder="Nome do produto" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div className="grid grid-cols-2 gap-2"><div><label className="font-bold block mb-1">Custo (R$)</label><input type="number" step="0.01" value={formCost} onChange={e => setFormCost(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div><div><label className="font-bold block mb-1">Venda (R$)</label><input type="number" step="0.01" value={formPrice} onChange={e => setFormPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div></div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Estoque Inicial *</label><input type="number" required value={formDuration} onChange={e => setFormDuration(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div><label className="font-bold block mb-1">Estoque Mínimo *</label><input type="number" required value={formMinStock} onChange={e => setFormMinStock(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
-                </div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Produto</button>
-              </form>
-            )}
-
-            {modalType === "sale" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                const qty = Number(saleQuantity) || 1;
-                const prc = Number(saleUnitPrice) || 0;
-                
-                if (editingId) {
-                  const oldSale = sales.find(s => s.id === editingId);
-                  const oldQty = oldSale && oldSale.productName === saleProductName ? oldSale.quantity : 0;
-                  const diffQty = qty - oldQty;
-                  if (diffQty > 0) {
-                    const targetProduct = stockSummary.find(p => p.name === saleProductName);
-                    if (!targetProduct || targetProduct.currentStock < diffQty) {
-                      alert(`⚠ Estoque insuficiente para o acréscimo! Saldo disponível: ${targetProduct?.currentStock || 0}`);
-                      return;
-                    }
-                  }
-                } else {
-                  const targetProduct = stockSummary.find(p => p.name === saleProductName);
-                  if (!targetProduct || targetProduct.currentStock < qty) {
-                    alert(`⚠ Estoque insuficiente! O produto "${saleProductName}" possui apenas ${targetProduct?.currentStock || 0} unidades disponíveis.`);
-                    return;
-                  }
-                }
-
-                if (editingId) {
-                  const updated = sales.map(s => s.id === editingId ? { ...s, productName: saleProductName, clientName: saleClientName || "Cliente", quantity: qty, unitPrice: prc, total: qty * prc, paymentMethod: salePaymentMethod, sellerName: s.sellerName || activeUserName } : s);
-                  setSales(updated);
-                  saveTenantData("sales", updated);
-                  recordSystemLog(`Editou venda do produto ${saleProductName}`);
-                } else {
-                  const newS = { id: `v-${Date.now()}`, date: formDate, clientName: saleClientName || "Cliente", productName: saleProductName, quantity: qty, unitPrice: prc, total: qty * prc, paymentMethod: salePaymentMethod, sellerName: activeUserName, status: "Concluída" };
-                  const updated = [newS, ...sales];
-                  setSales(updated);
-                  saveTenantData("sales", updated);
-                  recordSystemLog(`Registrou nova venda do produto ${saleProductName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div>
-                  <label className="font-bold block mb-1">Produto do Estoque *</label>
-                  <select value={saleProductName} onChange={e => { setSaleProductName(e.target.value); const p = availableStockForSale.find(prod => prod.name === e.target.value); if (p) setSaleUnitPrice(p.price); }} className="w-full border p-2.5 rounded-xl bg-white">
-                    {availableStockForSale.map(p => <option key={p.id} value={p.name}>{p.name} (Disponível: {p.currentStock})</option>)}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Quantidade *</label><input type="number" min="1" value={saleQuantity} onChange={e => setSaleQuantity(Number(e.target.value))} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div><label className="font-bold block mb-1">Preço Un. (R$)</label><input type="number" step="0.01" value={saleUnitPrice} onChange={e => setSaleUnitPrice(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
-                </div>
-                <div>
-                  <label className="font-bold block mb-1">Forma de Pagamento *</label>
-                  <select value={salePaymentMethod} onChange={e => setSalePaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
-                    <option value="Pix">Pix</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Cartão de Débito">Cartão de Débito</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                  </select>
-                </div>
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Venda</button>
-              </form>
-            )}
-
-            {modalType === "employee" && (
-              <form onSubmit={async e => {
-                e.preventDefault();
-                
-                const primaryRole = empRoles[0] || rolesList[0] || "Profissional Principal";
-                if (editingId) {
-                  const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
-                  setEmployees(updated);
-                  saveTenantData("employees", updated);
-                  recordSystemLog(`Editou colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && currentCompany.logins) {
-                    const updatedLogins = currentCompany.logins.map((l: any) => l.name === formName ? { ...l, role: empSystemRole } : l);
-                    updateCompanyInMasterDb({ logins: updatedLogins });
-                  }
-                } else {
-                  const newEmp = { id: `e-${Date.now()}`, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
-                  const updated = [...employees, newEmp];
-                  setEmployees(updated);
-                  saveTenantData("employees", updated);
-                  recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && empEmail && empPass) {
-                    const secureHash = hashPassword(empPass.trim());
-                    const newLogin = { 
-                      name: sanitizeInput(formName), 
-                      email: sanitizeInput(empEmail.trim().toLowerCase()), 
-                      user: sanitizeInput(empEmail.split("@")[0].toLowerCase()), 
-                      passwordHash: secureHash, 
-                      role: sanitizeInput(empSystemRole) 
-                    };
-                    
-                    const updatedLogins = [...(currentCompany.logins || []), newLogin];
-                    await updateCompanyInMasterDb({ logins: updatedLogins });
-                  }
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome Completo *</label><input required placeholder="Nome do colaborador" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                
-                <div>
-                  <label className="font-bold block mb-1">Cargo no Sistema (Gestor ou Colaborador) *</label>
-                  <select value={empSystemRole} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600">
-                    <option value="Gestor">Gestor (Acesso administrativo ao painel)</option>
-                    <option value="Colaborador">Colaborador (Acesso restrito à agenda própria)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold block mb-1">Funções / Especialidades (Múltipla Escolha)</label>
-                  <div className="max-h-32 overflow-y-auto border p-2.5 rounded-xl space-y-1.5 bg-slate-50">
-                    {rolesList.map((r, idx) => {
-                      const isSelected = empRoles.includes(r);
-                      return (
-                        <div key={idx} onClick={() => {
-                          if (isSelected) {
-                            setEmpRoles(empRoles.filter(role => role !== r));
-                          } else {
-                            setEmpRoles([...empRoles, r]);
-                          }
-                        }} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-200 rounded">
-                          {isSelected ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-400" />}
-                          <span>{r}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {!editingId && (
-                  <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
-                    <span className="font-bold text-indigo-600 block">Acesso de Login (E-mail e Senha):</span>
-                    <input type="email" placeholder="email@empresa.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
-                    <input type="password" placeholder="Senha inicial" value={empPass} onChange={e => setEmpPass(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
-                  </div>
-                )}
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Colaborador</button>
-              </form>
-            )}
-
-            {modalType === "customer" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = customers.map(c => c.id === editingId ? { ...c, name: formName, phone: formPhone, notes: formNotes } : c);
-                  setCustomers(updated);
-                  saveTenantData("customers", updated);
-                  recordSystemLog(`Editou cliente: ${formName}`);
-                } else {
-                  const newC = { id: `c-${Date.now()}`, name: formName, phone: formPhone, notes: formNotes };
-                  const updated = [...customers, newC];
-                  setCustomers(updated);
-                  saveTenantData("customers", updated);
-                  recordSystemLog(`Cadastrou novo cliente: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Cliente</button>
-              </form>
-            )}
-
-            {modalType === "expense" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = expenses.map(ex => ex.id === editingId ? { ...ex, date: formDate, description: formName, amount: Number(formAmount), category: expenseCategory, isRecurrent: expenseIsRecurrent } : ex);
-                  setExpenses(updated);
-                  saveTenantData("expenses", updated);
-                  recordSystemLog(`Editou despesa: ${formName}`);
-                } else {
-                  const newExp = { id: `e-${Date.now()}`, date: formDate, description: formName, amount: Number(formAmount), category: expenseCategory, isRecurrent: expenseIsRecurrent, status: "Pago" };
-                  const updated = [newExp, ...expenses];
-                  
-                  if (expenseIsRecurrent) {
-                    const [yyyy, mm, dd] = formDate.split("-");
-                    let nextMonth = Number(mm) + 1;
-                    let nextYear = Number(yyyy);
-                    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-                    const nextDateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${dd}`;
-                    const nextExp = { id: `e-${Date.now() + 1}`, date: nextDateStr, description: formName + " (Recorrente)", amount: Number(formAmount), category: expenseCategory, isRecurrent: true, status: "Pago" };
-                    updated.push(nextExp);
-                  }
-
-                  setExpenses(updated);
-                  saveTenantData("expenses", updated);
-                  recordSystemLog(`Cadastrou nova despesa: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Descrição *</label><input required placeholder="Descrição da despesa" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Categoria *</label><input required placeholder="Operacional" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div><label className="font-bold block mb-1">Valor (R$) *</label><input type="number" step="0.01" required value={formAmount} onChange={e => setFormAmount(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
-                </div>
-                <div className="pt-1">
-                  <label onClick={() => setExpenseIsRecurrent(!expenseIsRecurrent)} className="flex items-center gap-2 cursor-pointer select-none">
-                    {expenseIsRecurrent ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-400" />}
-                    <span className="font-bold">Despesa Recorrente (repetir automaticamente todo mês)</span>
-                  </label>
-                </div>
-                <button type="submit" className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Despesa</button>
-              </form>
-            )}
-
-            {modalType === "promotion" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = promotions.map(p => p.id === editingId ? { ...p, title: formName, targetItems: promoTargetItems, duration: promoDuration, discountPercent: Number(promoDiscount), isAllPromo: promoIsAll } : p);
-                  setPromotions(updated);
-                  saveTenantData("promotions", updated);
-                  recordSystemLog(`Editou promoção: ${formName}`);
-                } else {
-                  const newP: Promotion = { id: `p-${Date.now()}`, title: formName, targetItems: promoTargetItems, duration: promoDuration, discountPercent: Number(promoDiscount), isAllPromo: promoIsAll, active: true };
-                  const updated = [...promotions, newP];
-                  setPromotions(updated);
-                  saveTenantData("promotions", updated);
-                  recordSystemLog(`Criou nova promoção: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome da Promoção *</label><input required placeholder="Título da promoção" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                
-                <div>
-                  <label className="font-bold block mb-1">Selecionar Serviços e Produtos (Múltipla Escolha)</label>
-                  <div className="max-h-36 overflow-y-auto border p-2.5 rounded-xl space-y-1.5 bg-slate-50">
-                    {[...services.map(s => s.name), ...products.map(p => p.name)].map((item, idx) => {
-                      const isSelected = promoTargetItems.includes(item);
-                      return (
-                        <div key={idx} onClick={() => {
-                          if (isSelected) {
-                            setPromoTargetItems(promoTargetItems.filter(i => i !== item));
-                          } else {
-                            setPromoTargetItems([...promoTargetItems, item]);
-                          }
-                        }} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-200 rounded">
-                          {isSelected ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-400" />}
-                          <span>{item}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Tempo de Validade *</label><input required placeholder="Ex: 7 dias" value={promoDuration} onChange={e => setPromoDuration(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                  <div><label className="font-bold block mb-1">Desconto (%) *</label><input type="number" min="1" required value={promoDiscount} onChange={e => setPromoDiscount(Math.max(1, Number(e.target.value)))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
-                </div>
-                <div className="pt-1">
-                  <label onClick={() => setPromoIsAll(!promoIsAll)} className="flex items-center gap-2 cursor-pointer select-none">
-                    {promoIsAll ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} className="text-slate-400" />}
-                    <span className="font-bold">Aplicar em Tudo (Tudo em Promoção)</span>
-                  </label>
-                </div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Promoção</button>
-              </form>
-            )}
-
-            {modalType === "attendance" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                const assignedProf = isManager ? formProfessionalName : activeUserName;
-                if (editingId) {
-                  const updated = attendances.map(a => a.id === editingId ? { ...a, date: formDate, time: formTime, clientName: formClientName, serviceName: formServiceName, professionalName: assignedProf, netValue: Number(formGrossValue), paymentMethod: formPaymentMethod, notes: formNotes } : a);
-                  setAttendances(updated);
-                  saveTenantData("attendances", updated);
-                  recordSystemLog(`Editou atendimento de ${formClientName}`);
-                } else {
-                  const newAtt = { id: `at-${Date.now()}`, date: formDate, time: formTime, clientName: formClientName || "Cliente", serviceName: formServiceName, professionalName: assignedProf, grossValue: Number(formGrossValue), netValue: Number(formGrossValue), paymentMethod: formPaymentMethod, notes: formNotes, status: "Atendido" };
-                  const updated = [newAtt, ...attendances];
-                  setAttendances(updated);
-                  saveTenantData("attendances", updated);
-                  recordSystemLog(`Lançou atendimento para ${formClientName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Cliente *</label><input required value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Serviço</label><select value={formServiceName} onChange={e => { setFormServiceName(e.target.value); const s = services.find(srv => srv.name === e.target.value); if (s) setFormGrossValue(s.price); }} className="w-full border p-2.5 rounded-xl bg-white">{services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}</select></div>
-                  <div>
-                    <label className="font-bold block mb-1">Profissional</label>
-                    {isManager ? (
-                      <select value={formProfessionalName} onChange={e => setFormProfessionalName(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
-                        {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
-                      </select>
-                    ) : (
-                      <input disabled value={activeUserName} className="w-full border p-2.5 rounded-xl bg-slate-100 font-bold" />
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><label className="font-bold block mb-1">Valor (R$)</label><input type="number" step="0.01" value={formGrossValue} onChange={e => setFormGrossValue(Number(e.target.value))} className="w-full border p-2.5 rounded-xl font-bold" /></div>
-                  <div>
-                    <label className="font-bold block mb-1">Pagamento</label>
-                    <select value={formPaymentMethod} onChange={e => setFormPaymentMethod(e.target.value)} className="w-full border p-2.5 rounded-xl bg-white">
-                      <option value="Pix">Pix</option>
-                      <option value="Cartão de Crédito">Cartão de Crédito</option>
-                      <option value="Cartão de Débito">Cartão de Débito</option>
-                      <option value="Dinheiro">Dinheiro</option>
-                    </select>
-                  </div>
-                </div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Atendimento</button>
-              </form>
-            )}
           </div>
         </div>
       )}
