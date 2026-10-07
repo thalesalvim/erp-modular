@@ -170,12 +170,17 @@ export default function Home() {
 
   const [darkMode, setDarkMode] = useState(false);
 
-  // Estados para alteração de senha segura
+  // Estados para alteração de senha e e-mail
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPasswordInputSettings, setNewPasswordInputSettings] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [passwordChangeError, setPasswordChangeError] = useState("");
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState("");
+
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
+  const [emailChangeError, setEmailChangeError] = useState("");
+  const [emailChangeSuccess, setEmailChangeSuccess] = useState("");
 
   const bgClass = darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-800";
   const cardBgClass = darkMode ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800";
@@ -2349,25 +2354,40 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* BOTÃO DISCRETO DE ALTERAR SENHA NA ÚLTIMA OPÇÃO */}
-                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                  {/* BOTÕES DISCRETOS DE ALTERAR SENHA E ALTERAR E-MAIL NA ÚLTIMA OPÇÃO */}
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
                       <strong className="block text-xs font-bold">Credenciais de Acesso</strong>
-                      <span className="text-[11px] opacity-60">Gerencie sua senha de login com segurança.</span>
+                      <span className="text-[11px] opacity-60">Gerencie sua senha e e-mail de login com segurança.</span>
                     </div>
-                    <button
-                      onClick={() => {
-                        setPasswordChangeError("");
-                        setPasswordChangeSuccess("");
-                        setNewPasswordInputSettings("");
-                        setConfirmPasswordInput("");
-                        setIsPasswordModalOpen(true);
-                      }}
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer shadow transition flex items-center gap-1.5"
-                    >
-                      <KeyRound size={14} />
-                      <span>Alterar Senha</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEmailChangeError("");
+                          setEmailChangeSuccess("");
+                          setNewEmailInput(activeUserEmail || "");
+                          setIsEmailModalOpen(true);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs cursor-pointer shadow transition flex items-center gap-1.5"
+                      >
+                        <Mail size={14} />
+                        <span>Alterar E-mail</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setPasswordChangeError("");
+                          setPasswordChangeSuccess("");
+                          setNewPasswordInputSettings("");
+                          setConfirmPasswordInput("");
+                          setIsPasswordModalOpen(true);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs cursor-pointer shadow transition flex items-center gap-1.5"
+                      >
+                        <KeyRound size={14} />
+                        <span>Alterar Senha</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2376,7 +2396,122 @@ export default function Home() {
         </div>
       </main>
 
-      {/* MODAL DISCRETO DE ALTERAÇÃO DE SENHA */}
+      {/* MODAL DE ALTERAÇÃO DE E-MAIL */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex justify-between items-center">
+              <h2 className="text-base font-bold flex items-center gap-2">
+                <Mail size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <span>Alterar E-mail de Acesso</span>
+              </h2>
+              <button onClick={() => setIsEmailModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+            </div>
+            
+            <p className="text-slate-600 dark:text-slate-400">Insira o novo endereço de e-mail que deseja utilizar para acessar o sistema.</p>
+
+            <form onSubmit={async e => {
+              e.preventDefault();
+              setEmailChangeError("");
+              setEmailChangeSuccess("");
+
+              const cleanNewEmail = sanitizeInput(newEmailInput.toLowerCase());
+              if (!cleanNewEmail || !cleanNewEmail.includes("@")) {
+                setEmailChangeError("Insira um endereço de e-mail válido.");
+                return;
+              }
+
+              try {
+                await supabase.auth.updateUser({ email: cleanNewEmail });
+
+                const { data: tenantData } = await supabase.from('tenants').select('*').eq('slug', currentCompany.slug).single();
+                if (tenantData) {
+                  let loginsList = tenantData.logins || [];
+                  if (!Array.isArray(loginsList)) loginsList = [];
+                  
+                  const activeEmailLower = (activeUserEmail || "").toLowerCase();
+                  const activeNameLower = (activeUserName || "").toLowerCase();
+
+                  let idx = loginsList.findIndex((l: any) => 
+                    (activeEmailLower && ((l.email || "").toLowerCase() === activeEmailLower || (l.user || "").toLowerCase() === activeEmailLower)) ||
+                    (activeNameLower && (l.name || "").toLowerCase() === activeNameLower)
+                  );
+
+                  if (idx === -1 && loginsList.length > 0) idx = 0;
+
+                  if (idx !== -1) {
+                    loginsList[idx] = { ...loginsList[idx], email: cleanNewEmail, user: cleanNewEmail.split("@")[0] };
+                  } else {
+                    loginsList.push({
+                      name: activeUserName || "Gestor",
+                      email: cleanNewEmail,
+                      user: cleanNewEmail.split("@")[0],
+                      role: activeUserRole || "Gestor"
+                    });
+                  }
+
+                  await supabase.from('tenants').update({ logins: loginsList }).eq('slug', currentCompany.slug);
+                  setCurrentCompany((prev: any) => ({ ...prev, logins: loginsList }));
+                }
+
+                setActiveUserEmail(cleanNewEmail);
+                setEmailChangeSuccess("🎉 E-mail alterado com sucesso!");
+                recordSystemLog(`Alterou seu próprio e-mail de acesso para ${cleanNewEmail}`);
+
+                setTimeout(() => {
+                  setIsEmailModalOpen(false);
+                  setEmailChangeSuccess("");
+                }, 2000);
+              } catch (err) {
+                console.error(err);
+                setEmailChangeError("Ocorreu um erro ao atualizar o e-mail.");
+              }
+            }} className="space-y-3">
+              <div>
+                <label className="font-bold block mb-1">Novo E-mail *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="novo.email@empresa.com"
+                  value={newEmailInput}
+                  onChange={e => setNewEmailInput(e.target.value)}
+                  className="w-full border p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 dark:border-slate-800 outline-none text-slate-800 dark:text-white"
+                />
+              </div>
+
+              {emailChangeError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold">
+                  {emailChangeError}
+                </div>
+              )}
+
+              {emailChangeSuccess && (
+                <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold text-center">
+                  {emailChangeSuccess}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="w-1/2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 font-bold py-3 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`w-1/2 ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer shadow`}
+                >
+                  Salvar Novo E-mail
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ALTERAÇÃO DE SENHA */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
