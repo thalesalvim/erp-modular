@@ -2257,7 +2257,7 @@ export default function Home() {
                         value={salonConfig.name}
                         className="w-full border border-slate-700 bg-slate-900/60 text-slate-400 p-2.5 rounded-xl outline-none cursor-not-allowed select-none font-bold"
                       />
-                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, utilize a edição de clientes no Painel Master.</span>
+                      <span className="text-[10px] text-slate-500 mt-1 block">Para alterar o nome da empresa, entre em contato com o Suporte Handy.</span>
                     </div>
                   )}
 
@@ -2302,7 +2302,7 @@ export default function Home() {
                       <div className="flex justify-between items-center">
                         <div>
                           <strong className="block">Logotipo ou Ícone do Ramo</strong>
-                          <span className="opacity-70">Escolha o símbolo do seu ramo ou envie uma imagem PNG própria.</span>
+                          <span className="opacity-70">Escolha o símbolo de sua preferência ou envie uma imagem PNG própria.</span>
                         </div>
                         <input
                           type="file"
