@@ -3,7 +3,7 @@ import { resolveMemberships, type TenantAuthSummary, type TenantMembership } fro
 
 const TENANT_AUTH_COLUMNS = [
   'id', 'slug', 'company_name', 'owner_name', 'owner_email', 'plan_name', 'monthly_fee',
-  'due_day', 'status', 'allowed_modules', 'invoices', 'logo_type', 'logo_icon', 'logo_url',
+  'due_day', 'status', 'allowed_modules', 'logo_type', 'logo_icon', 'logo_url',
   'primary_color', 'created_at',
 ].join(',');
 

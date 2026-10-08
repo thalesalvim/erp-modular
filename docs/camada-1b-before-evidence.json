@@ -1,0 +1,55 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "timestamp": "2026-10-08T17:02:36.946Z",
+  "phase": "before",
+  "results": [
+    {
+      "name": "ownerA: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "managerA: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "employeeA: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "ownerB: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "noMembership: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "multipleMemberships: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "platformAdmin: actual authService login, membership, role and logout",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Invalid password rejected by Auth",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Master APIs: anon 401; ordinary owner/employee all CRUD 403",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Master ignores manipulated tenant, role and support parameters",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Platform admin CRUD persisted; credentials/mass assignment and foreign origin rejected",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Equipe legacy API retired; unauthorized invites, cross-tenant invites and promotion rejected",
+      "outcome": "PASS"
+    }
+  ]
+}

@@ -2,30 +2,51 @@ import { NextResponse } from 'next/server';
 import { isTenantRole, mayInviteRole } from '@/lib/auth/authorization';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { invitationRedirect, parseInvitationInput } from '@/lib/auth/invitations';
 
 export const dynamic = 'force-dynamic';
+
+function reply(body: unknown, status: number) {
+  return NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store' } });
+}
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return NextResponse.json({ error: 'Autenticação necessária.' }, { status: 401 });
+  if (userError || !user) return reply({ error: 'Autenticação necessária.' }, 401);
+
+  if (request.headers.get('origin') !== new URL(request.url).origin ||
+      !request.headers.get('content-type')?.startsWith('application/json')) {
+    return reply({ error: 'Origem ou formato inválido.' }, 400);
+  }
 
   let body: unknown;
   try {
-    body = await request.json();
+    const reader = request.body?.getReader();
+    if (!reader) throw new Error('Invitation required.');
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > 4096) { await reader.cancel(); throw new Error('Invitation too large.'); }
+      parts.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+    body = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return NextResponse.json({ error: 'Corpo da solicitação inválido.' }, { status: 400 });
+    return reply({ error: 'Corpo da solicitação inválido.' }, 400);
   }
-  if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Dados inválidos.' }, { status: 400 });
-
-  const input = body as Record<string, unknown>;
-  const tenantId = typeof input.tenantId === 'string' ? input.tenantId : '';
-  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
-  const requestedRole = input.role;
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenantId) ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isTenantRole(requestedRole)) {
-    return NextResponse.json({ error: 'Informe empresa, e-mail e cargo válidos.' }, { status: 400 });
+  let input;
+  try {
+    input = parseInvitationInput(body);
+  } catch {
+    return reply({ error: 'Informe somente empresa, e-mail e cargo válidos.' }, 400);
   }
+  const { tenantId, email, role: requestedRole } = input;
 
   const { data: membership, error: membershipError } = await supabase
     .from('tenant_memberships')
@@ -34,32 +55,30 @@ export async function POST(request: Request) {
     .eq('user_id', user.id)
     .eq('is_active', true)
     .maybeSingle();
-  if (membershipError) return NextResponse.json({ error: 'Não foi possível confirmar a permissão neste tenant.' }, { status: 503 });
+  if (membershipError) return reply({ error: 'Não foi possível confirmar a permissão neste tenant.' }, 503);
   if (!membership || !isTenantRole(membership.role) || !mayInviteRole(membership.role, requestedRole)) {
-    return NextResponse.json({ error: 'Sem permissão para convidar este cargo nesta empresa.' }, { status: 403 });
+    return reply({ error: 'Sem permissão para convidar este cargo nesta empresa.' }, 403);
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl) return NextResponse.json({ error: 'NEXT_PUBLIC_SITE_URL não está configurada para este ambiente.' }, { status: 503 });
+  // Set only after the actual Auth email template is configured and reviewed.
+  // A default implicit invitation must not be dispatched to a code-only/SSR callback.
+  if (process.env.AUTH_INVITE_TEMPLATE_MODE !== 'token_hash') {
+    return reply({ error: 'Convites indisponíveis até configurar o e-mail deste ambiente.' }, 503);
+  }
 
   let redirectTo: string;
   try {
-    const parsed = new URL(siteUrl);
-    const isLocal = ['localhost', '127.0.0.1'].includes(parsed.hostname);
-    if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash ||
-        (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal))) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_SITE_URL deve ser uma origem HTTPS válida.' }, { status: 503 });
-    }
-    redirectTo = new URL('/auth/callback?next=%2F', parsed.origin).toString();
+    redirectTo = invitationRedirect(process.env.NEXT_PUBLIC_SITE_URL);
   } catch {
-    return NextResponse.json({ error: 'NEXT_PUBLIC_SITE_URL inválida.' }, { status: 503 });
+    return reply({ error: 'Origem de convite indisponível neste ambiente.' }, 503);
   }
 
   try {
     const admin = createSupabaseAdminClient();
     const { data: invitation, error: invitationError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
     if (invitationError || !invitation.user) {
-      return NextResponse.json({ error: 'Não foi possível enviar o convite. Verifique se o e-mail já possui conta.' }, { status: 409 });
+      // Confirmed/existing accounts are not silently attached to another tenant or promoted.
+      return reply({ error: 'Não foi possível enviar o convite. Verifique se o e-mail já possui conta.' }, 409);
     }
 
     const { error: insertError } = await admin.from('tenant_memberships').insert({
@@ -69,10 +88,10 @@ export async function POST(request: Request) {
       is_active: true,
     });
     if (insertError) {
-      return NextResponse.json({ error: 'Convite criado, mas a associação não foi concluída; requer revisão administrativa.' }, { status: 502 });
+      return reply({ error: 'Convite criado, mas a associação não foi concluída; requer revisão administrativa.' }, 502);
     }
-    return NextResponse.json({ accepted: true, userId: invitation.user.id }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+    return reply({ accepted: true, userId: invitation.user.id }, 201);
   } catch {
-    return NextResponse.json({ error: 'Convites indisponíveis até configurar a chave administrativa server-side.' }, { status: 503 });
+    return reply({ error: 'Convites indisponíveis neste ambiente.' }, 503);
   }
 }

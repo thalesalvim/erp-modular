@@ -27,11 +27,15 @@ END
 $$;
 
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tenants FORCE ROW LEVEL SECURITY;
+-- Ordinary API roles are neither table owners nor BYPASSRLS roles. RLS already
+-- constrains them. FORCE does not constrain hosted postgres/service_role with
+-- BYPASSRLS, and membership helpers must retain their deliberate owner access.
+-- Do not enable FORCE as a substitute for protecting privileged server keys.
+ALTER TABLE public.tenants NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_data ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tenant_data FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.tenant_data NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.companies FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.companies NO FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL ON public.tenants, public.tenant_data, public.companies
   FROM PUBLIC, anon, authenticated;
@@ -63,10 +67,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+-- Hosted migration connections cannot impersonate Supabase's managed role.
+-- Current application objects and postgres defaults above remain explicitly closed.
+DO $$
+BEGIN
+  IF pg_has_role(current_user, 'supabase_admin', 'MEMBER') THEN
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated';
+  ELSE
+    RAISE NOTICE 'Managed supabase_admin defaults unchanged: not authorized to alter this role';
+  END IF;
+END
+$$;
 COMMIT;

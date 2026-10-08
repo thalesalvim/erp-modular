@@ -60,9 +60,8 @@ test('the staged foundation enforces tenant boundaries after the guarded cutover
       await db.exec(await readSql(migration));
     }
 
-    // The production `postgres` role is not a superuser. Model the definer and
-    // table owner as a non-superuser so FORCE RLS cannot be masked by PGlite's
-    // built-in superuser when membership helpers run.
+    // Model the definer/identity-table owner without BYPASSRLS to catch recursive
+    // policies if owner access is accidentally removed from membership helpers.
     await db.exec(`
       CREATE ROLE migration_owner NOLOGIN;
       GRANT USAGE, CREATE ON SCHEMA public, private TO migration_owner;
@@ -114,6 +113,12 @@ test('the staged foundation enforces tenant boundaries after the guarded cutover
 
     await db.exec("SET handyhub.cutover_ready = 'yes';");
     await db.exec(await readSql(cutoverPath));
+
+    const securityFlags = await db.query(`SELECT relname, relrowsecurity, relforcerowsecurity
+      FROM pg_class WHERE oid IN ('public.tenants'::regclass, 'public.tenant_data'::regclass,
+      'public.companies'::regclass, 'public.tenant_memberships'::regclass, 'public.platform_admins'::regclass)`);
+    assert.equal(securityFlags.rows.length, 5);
+    assert.ok(securityFlags.rows.every((row) => row.relrowsecurity && !row.relforcerowsecurity));
 
     const tenantA = '10000000-0000-0000-0000-00000000000a';
     const tenantB = '10000000-0000-0000-0000-00000000000b';
@@ -169,6 +174,18 @@ test('the staged foundation enforces tenant boundaries after the guarded cutover
       'SELECT name FROM public.companies ORDER BY name',
     );
     assert.deepEqual(ownCompanies.rows.map((row) => row.name), ['Company A']);
+
+    const managerProfile = await asRole(db, 'authenticated', users.managerA,
+      `UPDATE public.tenants SET owner_name = 'denied' WHERE id = '${tenantA}' RETURNING id`);
+    assert.equal(managerProfile.rows.length, 0, 'manager cannot perform owner-only profile changes');
+    const employeeCompany = await asRole(db, 'authenticated', users.employeeA,
+      `UPDATE public.companies SET name = 'denied' WHERE tenant_id = '${tenantA}' RETURNING id`);
+    assert.equal(employeeCompany.rows.length, 0, 'employee cannot change company metadata');
+    await assert.rejects(() => asRole(db, 'authenticated', users.ownerA,
+      `UPDATE public.companies SET tenant_id = '${tenantB}' WHERE tenant_id = '${tenantA}'`),
+      /row-level security/i, 'WITH CHECK rejects transfer of company ownership to another tenant');
+    const ownerBRead = await asRole(db, 'authenticated', users.ownerB, 'SELECT slug FROM public.tenants');
+    assert.deepEqual(ownerBRead.rows.map((row) => row.slug), ['tenant-b']);
     const crossCompany = await asRole(
       db,
       'authenticated',

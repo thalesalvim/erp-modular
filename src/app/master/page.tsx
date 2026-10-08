@@ -1,49 +1,22 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import Link from "next/link";
 import {
   ShieldCheck,
   Building2,
-  DollarSign,
-  AlertTriangle,
   Lock,
-  Unlock,
-  CheckCircle2,
-  XCircle,
   Plus,
-  Receipt,
-  Search,
-  Cpu,
   Mail,
-  ExternalLink,
   Rocket,
-  FileText,
-  UploadCloud,
-  FileCheck,
   Trash2,
-  Save,
-  MessageSquare,
   LogOut,
-  KeyRound,
-  Scissors,
-  Sparkles,
-  Flower2,
-  ShoppingBag,
   Pencil,
   Phone,
-  Paperclip,
-  CheckCircle,
-  CheckSquare,
-  Square,
   Activity,
-  Award,
-  Sparkle,
-  Clock,
   ChevronDown,
   ChevronUp
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import type { MasterTenantRow } from "@/lib/master/contracts";
 import { useAuth } from '@/components/auth/AuthProvider';
 import { AuthLoginForm } from '@/components/auth/AuthEntry';
 
@@ -109,11 +82,31 @@ const MASTER_PLANS_LIST = [
   { name: "Consultoria Avulsa", price: 120.00, desc: "Sessão única de consultoria" }
 ];
 
-const MASTER_TENANT_COLUMNS = [
-  'id', 'slug', 'company_name', 'owner_name', 'owner_email', 'plan_name', 'monthly_fee',
-  'due_day', 'status', 'allowed_modules', 'invoices', 'logo_type', 'logo_icon', 'logo_url',
-  'primary_color', 'created_at',
-].join(',');
+function newEventId(prefix: string) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
+async function masterRequest(path: string, method = 'GET', body?: unknown) {
+  const response = await fetch(path, {
+    method, credentials: 'same-origin', cache: 'no-store',
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+  const result = await response.json() as { error?: string; tenants?: MasterTenantRow[]; tenant?: MasterTenantRow; deleted?: boolean };
+  if (!response.ok) throw new Error(result.error || 'Operação administrativa recusada.');
+  return result;
+}
+
+function toTenantAccount(t: MasterTenantRow): TenantAccount {
+  return {
+    id: t.id, slug: t.slug, companyName: t.company_name, document: '',
+    ownerName: t.owner_name || '', ownerEmail: t.owner_email || '', ownerPhone: '',
+    planName: t.plan_name, monthlyFee: Number(t.monthly_fee), dueDay: Number(t.due_day),
+    status: t.status, autoBlockGraceDays: 5, allowedModules: t.allowed_modules || {},
+    moduleRoles: {}, invoices: t.invoices || [], contractDocument: null, internalNotes: '',
+    logoType: t.logo_type, logoIcon: t.logo_icon, logoUrl: t.logo_url || undefined,
+    primaryColor: t.primary_color, createdAt: t.created_at,
+  };
+}
 
 const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
   "Básico": {
@@ -184,7 +177,7 @@ function MasterWorkspace() {
   const [selectedTenantId, setSelectedTenantId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("contrato_notas");
   const [searchTerm, setSearchTerm] = useState("");
-  const [logSearchTerm, setLogSearchTerm] = useState("");
+  const [logSearchTerm] = useState("");
   const [isNewTenantModalOpen, setIsNewTenantModalOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [modalError, setModalError] = useState("");
@@ -200,13 +193,12 @@ function MasterWorkspace() {
   const [editPlanName, setEditPlanName] = useState("Pro");
 
   const [newCompany, setNewCompany] = useState("");
-  const [newDocument, setNewDocument] = useState("");
   const [newOwner, setNewOwner] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newPlan, setNewPlan] = useState("Pro");
   const [newFee, setNewFee] = useState(149.90);
-  const [newDueDay, setNewDueDay] = useState(10);
+  const newDueDay = 10;
 
   const [isEditInvoiceModalOpen, setIsEditInvoiceModalOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
@@ -222,52 +214,25 @@ function MasterWorkspace() {
   useEffect(() => {
     const fetchTenants = async () => {
       try {
-        const { data, error } = await supabase.from('tenants').select(MASTER_TENANT_COLUMNS);
-        if (error) throw error;
-        if (!error && data && data.length > 0) {
-          const formatted: TenantAccount[] = data.map((t: any) => ({
-            id: t.id,
-            slug: t.slug || "studio-hair",
-            companyName: t.company_name || t.companyName || "Empresa",
-            document: t.document || "00.000.000/0001-00",
-            ownerName: t.owner_name || t.ownerName || "Gestor",
-            ownerEmail: t.owner_email || t.ownerEmail || "",
-            ownerPhone: t.owner_phone || t.ownerPhone || "",
-            planName: t.plan_name || t.planName || "Pro",
-            monthlyFee: Number(t.monthly_fee || t.monthlyFee || 149.90),
-            dueDay: Number(t.due_day || t.dueDay || 10),
-            status: (t.status || "Ativo") as "Ativo" | "Bloqueado" | "Pendente" | "Cancelado",
-            autoBlockGraceDays: 5,
-            allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
-            moduleRoles: t.module_roles || t.moduleRoles || {},
-            invoices: t.invoices || [],
-            contractDocument: t.contractDocument || null,
-            internalNotes: t.internalNotes || "Contrato ativo.",
-            logoType: t.logo_type || "icon",
-            logoIcon: t.logo_icon || "scissors",
-            primaryColor: t.primary_color || "pink",
-            createdAt: t.created_at || "2026-01-01"
-          }));
-          setTenants(formatted);
-          if (formatted.length > 0 && !selectedTenantId) {
-            setSelectedTenantId(formatted[0].id);
-          }
-        }
+        const result = await masterRequest('/api/master/tenants');
+        const formatted = (result.tenants || []).map(toTenantAccount);
+        setTenants(formatted);
+        setSelectedTenantId((current) => current || formatted[0]?.id || '');
+        const savedLogs = localStorage.getItem("saas_system_audit_logs");
+    if (savedLogs) {
+      try { setSystemLogs(JSON.parse(savedLogs)); } catch { /* Ignore malformed legacy presentation logs. */ }
+    }
       } catch {
         setFeedbackMsg('Não foi possível carregar empresas do servidor.');
       }
     };
     fetchTenants();
 
-    const savedLogs = localStorage.getItem("saas_system_audit_logs");
-    if (savedLogs) {
-      try { setSystemLogs(JSON.parse(savedLogs)); } catch (e) {}
-    }
   }, []);
 
   const logAction = (companyName: string, action: string, author: string = "Master Admin") => {
     const newLog: SystemLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: newEventId("log"),
       timestamp: new Date().toLocaleString("pt-BR"),
       companyName,
       action,
@@ -309,12 +274,6 @@ function MasterWorkspace() {
 
   const [currentNotes, setCurrentNotes] = useState("");
 
-  useEffect(() => {
-    if (selectedTenant) {
-      setCurrentNotes(selectedTenant.internalNotes || "");
-    }
-  }, [selectedTenantId, selectedTenant]);
-
   const saasMetrics = useMemo(() => {
     const totalMRR = tenants.filter(t => t.status !== "Cancelado").reduce((acc, t) => acc + t.monthlyFee, 0);
     const activeCount = tenants.filter(t => t.status === "Ativo").length;
@@ -323,21 +282,25 @@ function MasterWorkspace() {
     return { totalMRR, activeCount, blockedCount, pendingCount };
   }, [tenants]);
 
+  const persistTenantChange = async (id: string, input: unknown) => {
+    try {
+      const result = await masterRequest(`/api/master/tenants/${id}`, 'PATCH', input);
+      if (!result.tenant) throw new Error('Resposta administrativa inválida.');
+      const tenant = toTenantAccount(result.tenant);
+      setTenants((current) => current.map((item) => item.id === id ? tenant : item));
+      return true;
+    } catch (error) {
+      setFeedbackMsg(error instanceof Error ? error.message : 'Não foi possível salvar.');
+      return false;
+    }
+  };
+
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
     const nextStatus: "Ativo" | "Bloqueado" = target.status === "Bloqueado" ? "Ativo" : "Bloqueado";
 
-    const updatedList = tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t);
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ status: nextStatus })
-        .eq('slug', target.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(tenantId, { status: nextStatus })) return;
 
     logAction(target.companyName, `Status alterado para ${nextStatus}`);
     setFeedbackMsg(`👑 Empresa ${nextStatus === 'Bloqueado' ? 'Bloqueada' : 'Desbloqueada'} com sucesso!`);
@@ -354,53 +317,15 @@ function MasterWorkspace() {
       [moduleId]: nextState
     };
 
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { 
-      ...t, 
-      allowedModules: updatedModules 
-    } : t);
-    
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({
-          allowed_modules: updatedModules,
-          ...(moduleId === 'dre' ? { dre: nextState } : {})
-        })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(selectedTenant.id, { allowed_modules: updatedModules })) return;
 
     logAction(selectedTenant.companyName, `Módulo [${moduleId}] alterado para ${nextState ? 'Ativo' : 'Bloqueado'}`);
     setFeedbackMsg(`⚡ Módulo ${nextState ? 'ativado' : 'bloqueado'}!`);
     setTimeout(() => setFeedbackMsg(""), 2500);
   };
 
-  const handleToggleRoleInstant = async (moduleId: string, roleName: string) => {
-    if (!selectedTenant) return;
-    const currentModuleRoles = selectedTenant.moduleRoles || {};
-    const rolesForModule = currentModuleRoles[moduleId] || ["Dono", "Gestor", "Colaborador"];
-    
-    let updatedRolesForModule = [];
-    if (rolesForModule.includes(roleName)) {
-      updatedRolesForModule = rolesForModule.filter((r: string) => r !== roleName);
-    } else {
-      updatedRolesForModule = [...rolesForModule, roleName];
-    }
-
-    const updatedModuleRoles = {
-      ...currentModuleRoles,
-      [moduleId]: updatedRolesForModule
-    };
-
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, moduleRoles: updatedModuleRoles } : t);
-    setTenants(updatedList);
-    
-
-    logAction(selectedTenant.companyName, `Alterou permissão do cargo [${roleName}] no módulo [${moduleId}]`);
-    setFeedbackMsg(`✅ Acesso do cargo ${roleName} atualizado!`);
-    setTimeout(() => setFeedbackMsg(""), 2000);
+  const handleToggleRoleInstant = () => {
+    setFeedbackMsg('Este recurso está indisponível nesta versão.');
   };
 
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>, invoiceId: string) => {
@@ -422,16 +347,7 @@ function MasterWorkspace() {
         return inv;
       });
 
-      const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
-      setTenants(updatedList);
-      
-
-      try {
-        await supabase
-          .from('tenants')
-          .update({ invoices: updatedInvoices })
-          .eq('slug', selectedTenant.slug);
-      } catch (e) {}
+      if (!await persistTenantChange(selectedTenant.id, { invoices: updatedInvoices })) return;
 
       logAction(selectedTenant.companyName, `Anexou comprovante à fatura ID: ${invoiceId}`);
       setFeedbackMsg("✅ Comprovante anexado!");
@@ -471,7 +387,7 @@ function MasterWorkspace() {
     }
 
     const newInvoice: TenantInvoice = {
-      id: `inv-${Date.now()}`,
+      id: newEventId("inv"),
       referenceMonth: nextMonthStr,
       amount: selectedTenant.monthlyFee,
       dueDate: nextDueDate,
@@ -480,16 +396,7 @@ function MasterWorkspace() {
     };
 
     const updatedInvoices = [...invoices, newInvoice];
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ invoices: updatedInvoices })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(selectedTenant.id, { invoices: updatedInvoices })) return;
 
     logAction(selectedTenant.companyName, `Gerou nova fatura para ${nextMonthStr}`);
     setFeedbackMsg(`✅ Fatura de ${nextMonthStr} gerada!`);
@@ -513,39 +420,7 @@ function MasterWorkspace() {
     const newAllowedMods = PLAN_DEFAULT_MODULES[editPlanName] || selectedTenant.allowedModules;
     const newFeeVal = editPlanName === "Básico" ? 89.90 : editPlanName === "Ultra" ? 299.90 : 149.90;
 
-    const updatedList = tenants.map(t => {
-      if (t.id === selectedTenant.id) {
-        return {
-          ...t,
-          companyName: editCompanyName,
-          ownerName: editOwnerName,
-          ownerEmail: editOwnerEmail,
-          ownerPhone: editOwnerPhone,
-          monthlyFee: Number(editMonthlyFee || newFeeVal),
-          planName: editPlanName,
-          allowedModules: newAllowedMods
-        };
-      }
-      return t;
-    });
-
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({
-          company_name: editCompanyName,
-          owner_name: editOwnerName,
-          owner_email: editOwnerEmail,
-          owner_phone: editOwnerPhone,
-          monthly_fee: Number(editMonthlyFee || newFeeVal),
-          plan_name: editPlanName,
-          allowed_modules: newAllowedMods
-        })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(selectedTenant.id, { company_name: editCompanyName, owner_name: editOwnerName, owner_email: editOwnerEmail, monthly_fee: Number(editMonthlyFee || newFeeVal), plan_name: editPlanName, allowed_modules: newAllowedMods })) return;
 
     logAction(editCompanyName, `Atualizou plano para ${editPlanName}`);
     setIsEditTenantModalOpen(false);
@@ -556,22 +431,23 @@ function MasterWorkspace() {
   const handleDeleteTenant = async () => {
     if (!selectedTenant) return;
     const confirmName = prompt(`⚠ ATENÇÃO!\n\nVocê vai excluir permanentemente a empresa "${selectedTenant.companyName}".\n\nDigite o nome exato da empresa para confirmar:`);
-    
+
     if (confirmName !== selectedTenant.companyName) {
       alert("Nome incorreto. A exclusão foi cancelada.");
       return;
     }
 
-    const targetSlug = selectedTenant.slug;
     const targetName = selectedTenant.companyName;
-
     try {
-      await supabase.from('tenants').delete().eq('slug', targetSlug);
-    } catch (e) {}
+      await masterRequest(`/api/master/tenants/${selectedTenant.id}`, 'DELETE');
+    } catch (error) {
+      setFeedbackMsg(error instanceof Error ? error.message : 'Exclusão recusada.');
+      return;
+    }
 
     const remaining = tenants.filter(t => t.id !== selectedTenant.id);
     setTenants(remaining);
-    
+
     if (remaining.length > 0) {
       setSelectedTenantId(remaining[0].id);
     } else {
@@ -583,30 +459,12 @@ function MasterWorkspace() {
     setTimeout(() => setFeedbackMsg(""), 4000);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedTenant) return;
-
-    const newDoc: ContractDocument = {
-      name: file.name,
-      size: `${(file.size / 1024).toFixed(1)} KB`,
-      uploadedAt: new Date().toISOString().split("T")[0]
-    };
-
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: newDoc } : t);
-    setTenants(updatedList);
-    
-    logAction(selectedTenant.companyName, `Anexou o contrato: ${file.name}`);
-    setFeedbackMsg("✅ Contrato anexado!");
-    setTimeout(() => setFeedbackMsg(""), 3000);
+  const handleFileUpload = () => {
+    setFeedbackMsg('Este recurso está indisponível nesta versão.');
   };
 
   const handleRemoveDocument = () => {
-    if (!selectedTenant || !confirm("Remover contrato?")) return;
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: null } : t);
-    setTenants(updatedList);
-    
-    logAction(selectedTenant.companyName, "Removeu o contrato");
+    setFeedbackMsg('Este recurso está indisponível nesta versão.');
   };
 
   const openEditInvoiceModal = (inv: TenantInvoice) => {
@@ -648,16 +506,7 @@ function MasterWorkspace() {
       return inv;
     });
 
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ invoices: updatedInvoices })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(selectedTenant.id, { invoices: updatedInvoices })) return;
 
     logAction(selectedTenant.companyName, `Editou a fatura ${invoiceMonth}`);
     setIsEditInvoiceModalOpen(false);
@@ -670,38 +519,15 @@ function MasterWorkspace() {
     if (!selectedTenant || !confirm("Excluir fatura?")) return;
     const updatedInvoices = selectedTenant.invoices.filter((inv: TenantInvoice) => inv.id !== invoiceId);
 
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ invoices: updatedInvoices })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(selectedTenant.id, { invoices: updatedInvoices })) return;
 
     logAction(selectedTenant.companyName, `Excluiu a fatura ID: ${invoiceId}`);
     setFeedbackMsg("🗑 Fatura excluída!");
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
-  const handleSaveNotes = async () => {
-    if (!selectedTenant) return;
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, internalNotes: currentNotes } : t);
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ internalNotes: currentNotes })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
-
-    logAction(selectedTenant.companyName, "Atualizou anotações internas");
-    setFeedbackMsg("✅ Anotações salvas!");
-    setTimeout(() => setFeedbackMsg(""), 3000);
+  const handleSaveNotes = () => {
+    setFeedbackMsg('Este recurso está indisponível nesta versão.');
   };
 
   const markInvoicePaid = async (tenantId: string, invoiceId: string) => {
@@ -720,21 +546,7 @@ function MasterWorkspace() {
       return inv;
     });
 
-    const updatedList = tenants.map(t => {
-      if (t.id === tenantId) {
-        return { ...t, status: "Ativo" as const, invoices: updatedInvoices };
-      }
-      return t;
-    });
-    setTenants(updatedList);
-    
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ status: "Ativo", invoices: updatedInvoices })
-        .eq('slug', target.slug);
-    } catch (e) {}
+    if (!await persistTenantChange(tenantId, { status: "Ativo", invoices: updatedInvoices })) return;
 
     logAction(target.companyName, `Confirmou pagamento da fatura ID: ${invoiceId}`);
     setFeedbackMsg("✅ Pagamento confirmado e empresa ativada!");
@@ -763,57 +575,29 @@ function MasterWorkspace() {
       due_day: Number(newDueDay) || 10,
       status: "Ativo" as const,
       allowed_modules: defaultModsForNew,
-      invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
+      invoices: [{ id: newEventId("inv"), referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
       logo_type: "icon",
       logo_icon: "scissors",
-      primary_color: "pink",
-      created_at: new Date().toISOString().split("T")[0]
+      primary_color: "pink"
     };
 
-    let createdId = '';
+    let formatted: TenantAccount;
     try {
-      const { data, error } = await supabase.from('tenants').insert([newTenantData]).select('id').single();
-      if (error || !data?.id) {
-        setModalError('Não foi possível cadastrar a empresa. Nenhuma credencial Auth foi criada.');
-        return;
-      }
-      createdId = data.id;
-    } catch {
-      setModalError('Não foi possível cadastrar a empresa. Nenhuma credencial Auth foi criada.');
+      const result = await masterRequest('/api/master/tenants', 'POST', newTenantData);
+      if (!result.tenant) throw new Error('Resposta administrativa inválida.');
+      formatted = toTenantAccount(result.tenant);
+    } catch (error) {
+      setModalError(error instanceof Error ? error.message : 'Cadastro recusado.');
       return;
     }
-
-    const formatted: TenantAccount = {
-      id: createdId,
-      slug,
-      companyName: newCompany,
-      document: newDocument || "Não informado",
-      ownerName: newOwner,
-      ownerEmail: checkEmail,
-      ownerPhone: newPhone,
-      planName: newPlan,
-      monthlyFee: Number(newFee) || 149.90,
-      dueDay: Number(newDueDay) || 10,
-      status: "Ativo",
-      autoBlockGraceDays: 5,
-      allowedModules: defaultModsForNew,
-      invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
-      contractDocument: null,
-      internalNotes: "Novo contrato cadastrado.",
-      logoType: "icon",
-      logoIcon: "scissors",
-      primaryColor: "pink",
-      createdAt: new Date().toISOString().split("T")[0]
-    };
 
     const updatedList = [...tenants, formatted];
     setTenants(updatedList);
     setSelectedTenantId(formatted.id);
-    
+
 
     setIsNewTenantModalOpen(false);
     setNewCompany("");
-    setNewDocument("");
     setNewOwner("");
     setNewEmail("");
     setNewPhone("");
@@ -889,7 +673,7 @@ function MasterWorkspace() {
                     <h3 className="text-xl font-black text-white">{selectedTenant.companyName}</h3>
                     <p className="text-xs text-slate-400 mt-1">Responsável: <strong>{selectedTenant.ownerName}</strong> • {selectedTenant.ownerPhone}</p>
                     <p className="text-xs text-indigo-400 font-semibold mt-0.5">Plano: {selectedTenant.planName} • R$ {selectedTenant.monthlyFee.toFixed(2)}/mês</p>
-                    
+
                     <div className="flex items-center gap-2 mt-3">
                       <a
                         href={`https://wa.me/${selectedTenant.ownerPhone.replace(/\D/g, '').startsWith('55') || selectedTenant.ownerPhone.replace(/\D/g, '').length > 11 ? selectedTenant.ownerPhone.replace(/\D/g, '') : '55' + selectedTenant.ownerPhone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(selectedTenant.ownerName)},%20tudo%20bem?`}
@@ -934,7 +718,7 @@ function MasterWorkspace() {
                       <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer">Anexar Contrato</button>
                     </div>
                     {selectedTenant.contractDocument ? <div className="p-3 bg-slate-950 rounded-xl flex justify-between items-center"><span>{selectedTenant.contractDocument.name}</span><button onClick={handleRemoveDocument} className="text-rose-400"><Trash2 size={14} /></button></div> : <p className="text-slate-500">Nenhum contrato anexado.</p>}
-                    
+
                     <div className="pt-4 border-t border-slate-800 space-y-2">
                       <div className="flex justify-between items-center"><strong className="text-white">Anotações Internas</strong><button onClick={handleSaveNotes} className="bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer">Salvar Anotações</button></div>
                       <textarea rows={3} value={currentNotes} onChange={e => setCurrentNotes(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none" />
@@ -970,9 +754,9 @@ function MasterWorkspace() {
                                 )}
                                 <button onClick={() => openEditInvoiceModal(inv)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer" title="Editar Fatura"><Pencil size={14} /></button>
                                 <button onClick={() => handleDeleteInvoice(inv.id)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer" title="Excluir Fatura"><Trash2 size={14} /></button>
-                                
-                                <button 
-                                  onClick={() => setCollapsedInvoices(prev => ({ ...prev, [inv.id]: !isCollapsed }))} 
+
+                                <button
+                                  onClick={() => setCollapsedInvoices(prev => ({ ...prev, [inv.id]: !isCollapsed }))}
                                   className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1"
                                 >
                                   {isCollapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
@@ -1022,9 +806,9 @@ function MasterWorkspace() {
                           <div key={m.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                             <div className="flex justify-between items-center">
                               <span className="font-bold text-white text-sm">{m.label}</span>
-                              <button 
+                              <button
                                 type="button"
-                                onClick={() => handleToggleModuleInstant(m.id)} 
+                                onClick={() => handleToggleModuleInstant(m.id)}
                                 className={`px-3 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition ${isEn ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"}`}
                               >
                                 {isEn ? "Módulo Ativo" : "Módulo Bloqueado"}
@@ -1039,10 +823,10 @@ function MasterWorkspace() {
                                   <button
                                     key={r}
                                     type="button"
-                                    onClick={() => handleToggleRoleInstant(m.id, r)}
+                                    onClick={handleToggleRoleInstant}
                                     className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer border ${
-                                      hasRoleAccess 
-                                        ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300" 
+                                      hasRoleAccess
+                                        ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300"
                                         : "bg-slate-900 border-slate-800 text-slate-600"
                                     }`}
                                   >
@@ -1117,7 +901,7 @@ function MasterWorkspace() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">WhatsApp *</label>
-                  <input required value={editOwnerPhone} onChange={e => setEditOwnerPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                  <input required disabled title="Indisponível nesta versão" value={editOwnerPhone} onChange={e => setEditOwnerPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">Plano Contratado *</label>
@@ -1187,7 +971,7 @@ function MasterWorkspace() {
 
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Status *</label>
-                <select value={invoiceStatus} onChange={e => setInvoiceStatus(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
+                <select value={invoiceStatus} onChange={e => setInvoiceStatus(e.target.value as TenantInvoice['status'])} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
                   <option value="Aberto">Aberto</option>
                   <option value="Pago">Pago</option>
                   <option value="Vencido">Vencido</option>
@@ -1245,7 +1029,7 @@ function MasterWorkspace() {
               </div>
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
-                <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                <input required placeholder="(19) 99999-9999" disabled title="Indisponível nesta versão" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
 
               <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Criar Empresa Segura</button>
@@ -1259,29 +1043,27 @@ function MasterWorkspace() {
 
 function MasterAccessGate() {
   const { user, loading, signOut } = useAuth();
-  const [status, setStatus] = useState<'checking' | 'allowed' | 'denied' | 'unavailable'>('checking');
+  const userId = user?.id;
+  const [access, setAccess] = useState<{ userId?: string; status: 'allowed' | 'denied' | 'unavailable' }>({ status: 'unavailable' });
+  const status = access.userId === userId ? access.status : 'checking';
 
   useEffect(() => {
-    if (!user) {
-      setStatus('checking');
-      return;
-    }
+    if (!userId) return;
     const controller = new AbortController();
-    setStatus('checking');
     void fetch('/api/auth/platform-admin', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
-          setStatus('unavailable');
+          setAccess({ userId, status: 'unavailable' });
           return;
         }
-        setStatus(result.isPlatformAdmin === true ? 'allowed' : 'denied');
+        setAccess({ userId, status: result.isPlatformAdmin === true ? 'allowed' : 'denied' });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setStatus('unavailable');
+        if (!controller.signal.aborted) setAccess({ userId, status: 'unavailable' });
       });
     return () => controller.abort();
-  }, [user?.id]);
+  }, [userId]);
 
   if (loading) return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-300">Validando sessão…</main>;
   if (!user) return <AuthLoginForm />;

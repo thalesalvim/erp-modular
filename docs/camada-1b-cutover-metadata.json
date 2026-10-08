@@ -1,0 +1,241 @@
+{
+  "project_ref": "gbblkkgowccjycxtexvx",
+  "verified_date": "2026-10-08",
+  "counts": {
+    "auth": 11,
+    "admins": 1,
+    "tenants": 2,
+    "memberships": 9,
+    "confirmed_auth": 11,
+    "null_companies": 0
+  },
+  "grants": [
+    {
+      "grantee": "authenticated",
+      "table_name": "companies",
+      "privilege_type": "DELETE"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "companies",
+      "privilege_type": "INSERT"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "companies",
+      "privilege_type": "SELECT"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "companies",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "tenant_data",
+      "privilege_type": "DELETE"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "tenant_data",
+      "privilege_type": "INSERT"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "tenant_data",
+      "privilege_type": "SELECT"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "tenant_memberships",
+      "privilege_type": "SELECT"
+    },
+    {
+      "grantee": "authenticated",
+      "table_name": "tenants",
+      "privilege_type": "DELETE"
+    }
+  ],
+  "tables": [
+    {
+      "rls": true,
+      "force": false,
+      "table": "companies"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "platform_admins"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "tenant_data"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "tenant_memberships"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "tenants"
+    }
+  ],
+  "policies": [
+    {
+      "name": "companies_delete_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "companies",
+      "using": "((tenant_id IS NOT NULL) AND (( SELECT private.has_tenant_role(companies.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin)))",
+      "command": "DELETE",
+      "with_check": null
+    },
+    {
+      "name": "companies_insert_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "companies",
+      "using": null,
+      "command": "INSERT",
+      "with_check": "((tenant_id IS NOT NULL) AND (( SELECT private.has_tenant_role(companies.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin)))"
+    },
+    {
+      "name": "companies_read_members",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "companies",
+      "using": "((tenant_id IS NOT NULL) AND (( SELECT private.has_tenant_role(companies.tenant_id, ARRAY['owner'::text, 'manager'::text, 'employee'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin)))",
+      "command": "SELECT",
+      "with_check": null
+    },
+    {
+      "name": "companies_update_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "companies",
+      "using": "((tenant_id IS NOT NULL) AND (( SELECT private.has_tenant_role(companies.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin)))",
+      "command": "UPDATE",
+      "with_check": "((tenant_id IS NOT NULL) AND (( SELECT private.has_tenant_role(companies.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin)))"
+    },
+    {
+      "name": "tenant_data_delete_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenant_data",
+      "using": "(( SELECT private.has_tenant_role(tenant_data.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "DELETE",
+      "with_check": null
+    },
+    {
+      "name": "tenant_data_insert_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenant_data",
+      "using": null,
+      "command": "INSERT",
+      "with_check": "(( SELECT private.has_tenant_role(tenant_data.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))"
+    },
+    {
+      "name": "tenant_data_read_members",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenant_data",
+      "using": "(( SELECT private.has_tenant_role(tenant_data.tenant_id, ARRAY['owner'::text, 'manager'::text, 'employee'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "SELECT",
+      "with_check": null
+    },
+    {
+      "name": "tenant_data_update_managers",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenant_data",
+      "using": "(( SELECT private.has_tenant_role(tenant_data.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "UPDATE",
+      "with_check": "(( SELECT private.has_tenant_role(tenant_data.tenant_id, ARRAY['owner'::text, 'manager'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))"
+    },
+    {
+      "name": "tenant_memberships_read_related",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenant_memberships",
+      "using": "((user_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.has_tenant_role(tenant_memberships.tenant_id, ARRAY['owner'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "SELECT",
+      "with_check": null
+    },
+    {
+      "name": "tenants_delete_platform_admin",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenants",
+      "using": "( SELECT private.is_platform_admin() AS is_platform_admin)",
+      "command": "DELETE",
+      "with_check": null
+    },
+    {
+      "name": "tenants_insert_platform_admin",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenants",
+      "using": null,
+      "command": "INSERT",
+      "with_check": "( SELECT private.is_platform_admin() AS is_platform_admin)"
+    },
+    {
+      "name": "tenants_read_members",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenants",
+      "using": "(( SELECT private.has_tenant_role(tenants.id, ARRAY['owner'::text, 'manager'::text, 'employee'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "SELECT",
+      "with_check": null
+    },
+    {
+      "name": "tenants_update_owner",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "tenants",
+      "using": "(( SELECT private.has_tenant_role(tenants.id, ARRAY['owner'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))",
+      "command": "UPDATE",
+      "with_check": "(( SELECT private.has_tenant_role(tenants.id, ARRAY['owner'::text]) AS has_tenant_role) OR ( SELECT private.is_platform_admin() AS is_platform_admin))"
+    }
+  ],
+  "migrations": [
+    {
+      "name": "staging_application_baseline",
+      "version": "20261008153321"
+    },
+    {
+      "name": "security_identity_memberships",
+      "version": "20261008153749"
+    },
+    {
+      "name": "security_tenant_data_identity",
+      "version": "20261008153753"
+    },
+    {
+      "name": "security_rls_policies",
+      "version": "20261008153800"
+    },
+    {
+      "name": "staging_security_cutover",
+      "version": "20261008171522"
+    }
+  ],
+  "non_rls_privileges": null
+}

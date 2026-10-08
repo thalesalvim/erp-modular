@@ -1,8 +1,11 @@
 # HandyHub — pré-requisitos de cutover da Camada 1
 
-Este plano prepara a migração para Supabase Auth. Não habilita o RLS das
-tabelas antigas por si só. O login atual valida credenciais do tenant no
-navegador e não cria a identidade Auth exigida pelas policies.
+O código da branch `codex/camada-1-auth` usa Supabase Auth, sessão SSR,
+memberships e Master autorizado no servidor. O cutover foi aplicado e testado
+somente em `handyhub-staging` em 08/10/2026; veja
+[o relatório do staging](camada-1b-cutover-staging.md).
+Production continua com o código e o banco anteriores. Este arquivo descreve
+pré-requisitos futuros; não constitui autorização para alterar Production.
 
 ## Sequência segura
 
@@ -11,8 +14,9 @@ navegador e não cria a identidade Auth exigida pelas policies.
    nesses ambientes. Não iniciar Preview se a URL/configuração separada faltar.
 2. Configurar `NEXT_PUBLIC_APP_ENV` e as credenciais públicas corretas em cada
    ambiente. A validação local já rejeita o host Production em local/Preview e
-   exige o host auditado em Production. Nenhuma variável Vercel foi alterada
-   nesta preparação; Production ainda não tem `NEXT_PUBLIC_APP_ENV`.
+   exige o host auditado em Production. Preview recebeu configuração própria
+   de staging na preparação anterior. Production não foi alterada e ainda
+   precisa de configuração explícita para receber a nova versão.
 3. Implementar login, convite e recuperação via Supabase Auth no servidor e
    validar que a sessão do app corresponda ao JWT enviado ao banco. Migrar o
    login próprio sem copiar senha ou hash para metadata Auth.
@@ -27,7 +31,7 @@ navegador e não cria a identidade Auth exigida pelas policies.
    `all_data` reúne cadastros, operações e configurações num JSON só, validar
    a matriz de cargos em operações do servidor antes de permitir escrita por
    funcionários ou segmentar essas estruturas em etapa própria.
-7. Publicar primeiro em Preview isolado e testar autenticação real: anon sem
+7. Testar localmente contra staging fechado ou em Preview isolado: anon sem
    leitura/escrita; usuário A só lê/edita A; usuário B só lê/edita B;
    funcionário sem operações administrativas; platform admin somente pelo
    caminho privilegiado aprovado. Incluir mapeamento explícito das rows de
@@ -36,13 +40,18 @@ navegador e não cria a identidade Auth exigida pelas policies.
 8. Verificar backup/restauração, Auth confirmado, associação ativa de Dono
    para cada tenant, payloads preservados e destinos dos três ambientes. Fazer
    revisão humana da lista de memberships sem expor credenciais.
-9. Somente no projeto Production aprovado, após a nova versão depender de
+9. Validar transporte real de convite e recuperação, templates e callbacks
+   nos domínios aprovados. Sem SMTP, tokens reais validam o mecanismo no staging,
+   mas a entrega permanece obrigatória antes de Production.
+10. Somente no projeto Production aprovado, após a nova versão depender de
    Auth, executar manualmente `activation/camada-1-cutover.sql`. A sessão
    precisa definir `handyhub.cutover_ready = 'yes'`. O script aborta se não
    houver platform admin confirmado ou se algum tenant não tiver Dono Auth
-   ativo. Ele habilita e força RLS, revoga acesso anon e aplica grants
-   restritos.
-10. Validar no projeto alvo as permissões anon/authenticated e o isolamento
+   ativo. Ele habilita RLS, revoga acesso anon e aplica grants restritos.
+   FORCE foi avaliado separadamente: as roles API não são owners nem têm
+   BYPASSRLS, e FORCE não restringe roles que já possuem BYPASSRLS. Não foi
+   habilitado no staging; não substitui a proteção das chaves privilegiadas.
+11. Validar no projeto alvo as permissões anon/authenticated e o isolamento
     A/B; então executar smoke tests autenticados, observar logs e confirmar
     que os fluxos de gestão operam sob os grants escolhidos.
 

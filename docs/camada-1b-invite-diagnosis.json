@@ -1,0 +1,32 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "status": 303,
+  "generated": {
+    "host": "gbblkkgowccjycxtexvx.supabase.co",
+    "path": "/auth/v1/verify",
+    "parameters": [
+      "token",
+      "type",
+      "redirect_to"
+    ],
+    "type": "invite",
+    "token_matches_token_hash": true
+  },
+  "callback": {
+    "origin": "http://localhost:3000",
+    "path": "/auth/callback",
+    "query_parameters": [
+      "next"
+    ],
+    "fragment_parameters": [
+      "access_token",
+      "expires_at",
+      "expires_in",
+      "refresh_token",
+      "sb",
+      "token_type",
+      "type"
+    ],
+    "type": "invite"
+  }
+}

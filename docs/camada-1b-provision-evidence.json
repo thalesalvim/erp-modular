@@ -1,0 +1,39 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "timestamp": "2026-10-08T15:50:25.070Z",
+  "phase": "provision",
+  "results": [
+    {
+      "name": "Synthetic Auth ownerA provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth managerA provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth employeeA provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth ownerB provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth noMembership provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth multipleMemberships provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic Auth platformAdmin provisioned and token verified",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Two tenants, six memberships, one platform admin, isolated synthetic business rows",
+      "outcome": "PASS"
+    }
+  ]
+}

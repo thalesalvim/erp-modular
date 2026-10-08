@@ -1,0 +1,45 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "timestamp": "2026-10-08T17:05:20.385Z",
+  "phase": "callback-mechanism-only",
+  "email_delivery_validated": false,
+  "email_delivery_required_for_production": true,
+  "results": [
+    {
+      "name": "Official invite token GET renders confirmation without consuming the token",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Official invite OTP POST creates verified Auth session and SSR cookies for the exact invited UUID/membership",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Invited identity sets its own Auth password, logs out and logs in normally with preserved membership",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Consumed and invalid real OTPs create no new session and redirect to a generic error",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Official recovery token establishes the correct SSR session; old password fails and new Auth password succeeds",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Callback rejects tenant injection, foreign redirect and cross-origin confirmation",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Real invite endpoint rejects employee, foreign tenant, owner promotion and manipulated fields",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Authorized owner/manager requests fail closed while the real email template remains unconfigured",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Official Auth rejects invite generation for an existing confirmed identity; membership remains unchanged",
+      "outcome": "PASS"
+    }
+  ]
+}
