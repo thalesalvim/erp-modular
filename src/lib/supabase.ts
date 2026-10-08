@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseConfig } from './supabaseConfig';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qmfwsnhpmsonndhgqsyi.supabase.co';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_JuGkK6_crCe97HVQX4T3mA_DVHOCaJ6';
+// Keep direct references: Next.js inlines NEXT_PUBLIC_* values at build time.
+const config = getSupabaseConfig({
+  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  publicKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  appEnvironment: process.env.NEXT_PUBLIC_APP_ENV,
+});
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Tenant filters and UI roles are not authorization; real access depends on RLS/grants.
+export const supabase = createClient(config.url, config.publicKey);

@@ -2,6 +2,11 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Configure Supabase explicitly before starting HandyHub. Copy `.env.example`
+to `.env.local` and fill in the URL and **public** key of the intentionally
+selected local/test project. Never use a privileged key. No project or key
+is selected when configuration is missing.
+
 First, run the development server:
 
 ```bash
@@ -16,9 +21,45 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can start editing the page by modifying `src/app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Camada 0: configuração e evidências
+
+Variáveis obrigatórias: `NEXT_PUBLIC_APP_ENV`, `NEXT_PUBLIC_SUPABASE_URL` e
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (esta última aceita publishable ou JWT anon).
+Use `local`, `preview` ou `production` no identificador de ambiente. Em Vercel,
+ele precisa corresponder ao `VERCEL_ENV` do build; `development` corresponde a
+`local`. Não use `NODE_ENV` para distinguir Preview de Production.
+
+URL, chave e identificador são embutidos pelo Next.js no build. Alterar uma
+variável posteriormente exige novo build. Um próximo build/deploy com estas
+mudanças falhará se as três variáveis não estiverem configuradas. Esta etapa
+não configura a Vercel nem faz deploy.
+
+O identificador de ambiente não verifica a identidade do banco. É preciso
+confirmar o project ref de cada URL no painel: local/teste para LOCAL,
+staging/desenvolvimento para PREVIEW e o projeto confirmado para PRODUÇÃO.
+Uma URL de produção inserida manualmente em LOCAL ainda apontaria para
+produção; o código remove a escolha silenciosa, não adivinha os projetos.
+A validação de chave verifica formato/role, não assinatura JWT, validade
+remota, grants ou RLS.
+
+Teste de configuração offline, sem carregar `.env.local` ou acessar Supabase:
+
+```bash
+node --test tests/supabase-config.test.mjs
+node node_modules/typescript/bin/tsc --noEmit --incremental false
+node node_modules/eslint/bin/eslint.js src/lib/supabase.ts src/lib/supabaseConfig.ts next.config.ts tests/supabase-config.test.mjs
+```
+
+O [relatório completo](docs/camada-0-relatorio.md) registra o estado conhecido
+e as pendências. As [consultas somente de leitura](supabase/inspection/camada-0-metadata.sql)
+devem ser executadas uma por vez no SQL Editor do projeto correto, sem
+consultar dados de empresas. Veja [a orientação de baseline](supabase/README.md).
+Filtros `slug`/`tenant_slug`, cargos da interface e `localStorage` não
+substituem autorização no banco; a Camada 1 ainda não foi implementada.
+
+This project uses `next/font/google` to load Inter. The build needs access to Google Fonts.
 
 ## Learn More
 
