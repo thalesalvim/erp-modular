@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -54,21 +54,10 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
-
-function hashPassword(pass: string): string {
-  try {
-    let hash = 0;
-    for (let i = 0; i < pass.length; i++) {
-      const char = pass.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return "sec_" + Math.abs(hash).toString(36) + "_" + btoa(pass).substring(0, 6);
-  } catch (e) {
-    return "sec_fallback_" + pass;
-  }
-}
+import { getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
+import { TenantAuthEntry } from '@/components/auth/AuthEntry';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { roleLabel } from '@/lib/auth/authorization';
 
 export interface EmployeeSchedule {
   dayIndex: number;
@@ -112,35 +101,25 @@ export interface SaleItem {
   notes?: string;
 }
 
+interface EmployeeIdentity {
+  authUserId?: string;
+  name?: string;
+  [field: string]: unknown;
+}
+
 export default function Home() {
+  const auth = useAuth();
   const [isMounted, setIsMounted] = useState(false);
-  
-  const [isLogged, setIsLogged] = useState(() => {
-    if (typeof window !== "undefined") {
-      return Boolean(localStorage.getItem("saas_active_session"));
-    }
-    return false;
-  });
+  const [isLogged, setIsLogged] = useState(false);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
-  const [isMasterBypassActive, setIsMasterBypassActive] = useState(false);
   
   const [activeUserName, setActiveUserName] = useState<string>("Gestor");
   const [activeUserRole, setActiveUserRole] = useState<string>("Gestor");
   const [activeUserEmail, setActiveUserEmail] = useState<string>("");
 
-  const [loginUser, setLoginUser] = useState("");
-  const [loginPass, setLoginPass] = useState("");
-  const [rememberCredentials, setRememberCredentials] = useState(false);
-  const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
-
-  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
-  const [forgotSearchQuery, setForgotSearchQuery] = useState("");
-  const [forgotSearchResult, setForgotSearchResult] = useState<any | null>(null);
-  const [forgotNewPass, setForgotNewPass] = useState("");
-  const [forgotStep, setForgotStep] = useState<"search" | "reset">("search");
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -213,117 +192,33 @@ export default function Home() {
 
   useEffect(() => {
     setIsMounted(true);
-    const initializeApp = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c") || localStorage.getItem("saas_active_tenant") || "studio-hair";
-      const masterBypassParam = params.get("master_bypass");
-      const storedBypass = localStorage.getItem("master_bypass_auth");
-      const bypassLoginName = localStorage.getItem("master_bypass_login_name");
-      const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
-
-      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      
-      let found = null;
-      if (!error && savedTenants && savedTenants.length > 0) {
-        found = savedTenants.find((t: any) => t.slug === slugParam) || savedTenants[0];
-      }
-
-      if (!found) {
-        found = {
-          slug: "studio-hair",
-          company_name: "Studio Hair & Beauty",
-          status: "Ativo",
-          planName: "Pro",
-          owner_name: "Gisele Alvim",
-          owner_email: "gisele@gmail.com",
-          logins: [
-            { user: "gisele", email: "gisele@gmail.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gisele Alvim" }
-          ]
-        };
-      }
-
-      if (found) {
-        const normalizedFound = {
-          ...found,
-          companyName: found.company_name || found.companyName,
-          planName: found.plan_name || found.planName,
-          allowedModules: found.allowed_modules || found.allowedModules || {},
-          moduleRoles: found.module_roles || found.moduleRoles || {}
-        };
-
-        setCurrentCompany(normalizedFound);
-        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Studio Hair & Beauty" }));
-        
-        if (normalizedFound.status === "Bloqueado") {
-          setIsTenantBlocked(true);
-          setIsLogged(false);
-          localStorage.removeItem("saas_active_session");
-          return;
-        }
-
-        loadTenantData(normalizedFound.slug);
-
-        if (masterBypassParam && masterBypassParam === storedBypass) {
-          setIsMasterBypassActive(true);
-          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gisele Alvim");
-          setActiveUserRole(bypassLoginRole || "Dono");
-          setActiveUserEmail(normalizedFound.owner_email || "gisele@gmail.com");
-          setIsLogged(true);
-          setActiveTab("dashboard");
-          recordSystemLog("Acesso Master Support Mode Ativado");
-        } else {
-          const savedSession = localStorage.getItem("saas_active_session");
-          if (savedSession) {
-            try {
-              const sessionData = JSON.parse(savedSession);
-              if (sessionData) {
-                setActiveUserName(sessionData.name);
-                setActiveUserRole(sessionData.role);
-                setActiveUserEmail(sessionData.email);
-                setIsLogged(true);
-              }
-            } catch (e) {}
-          }
-        }
-      }
+    const membership = auth.selectedMembership;
+    if (!membership || !auth.user) {
+      setIsLogged(false);
+      setCurrentCompany(null);
+      setActiveUserEmail("");
+      return;
+    }
+    const tenant = membership.tenant;
+    const normalizedTenant = {
+      ...tenant,
+      companyName: tenant.company_name || tenant.companyName || tenant.slug,
+      planName: tenant.plan_name || tenant.planName || "Pro",
+      allowedModules: tenant.allowed_modules || tenant.allowedModules || {},
+      moduleRoles: tenant.module_roles || tenant.moduleRoles || {},
     };
-    initializeApp();
-  }, []);
-
-  useEffect(() => {
-    const currentSlug = currentCompany?.slug || (typeof window !== "undefined" ? localStorage.getItem("saas_active_tenant") : null) || "studio-hair";
-    if (!currentSlug) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-        if (!error && savedTenants && Array.isArray(savedTenants)) {
-          const freshFound = savedTenants.find((t: any) => t.slug === currentSlug);
-          if (freshFound) {
-            const normalizedTenant = {
-              ...freshFound,
-              companyName: freshFound.company_name || freshFound.companyName,
-              planName: freshFound.plan_name || freshFound.planName,
-              allowedModules: freshFound.allowed_modules || freshFound.allowedModules || {},
-              moduleRoles: freshFound.module_roles || freshFound.moduleRoles || {}
-            };
-
-            setCurrentCompany(normalizedTenant);
-
-            if (freshFound.status === "Bloqueado") {
-              setIsTenantBlocked(true);
-              setIsLogged(false);
-            } else {
-              setIsTenantBlocked(false);
-            }
-          }
-        }
-      } catch (e) {}
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentCompany?.slug]);
-
+    setCurrentCompany(normalizedTenant);
+    setSalonConfig((previous) => ({ ...previous, name: normalizedTenant.companyName }));
+    setActiveUserName(String(auth.user.user_metadata?.full_name || auth.user.email || "Usuário"));
+    setActiveUserRole(roleLabel(membership.role));
+    setActiveUserEmail(auth.user.email || "");
+    setIsTenantBlocked(normalizedTenant.status === "Bloqueado");
+    setIsLogged(normalizedTenant.status !== "Bloqueado");
+    if (normalizedTenant.status !== "Bloqueado") {
+      setActiveTab(membership.role === "employee" ? "calendar" : "dashboard");
+      void loadTenantData(membership.tenant_id);
+    }
+  }, [auth.selectedMembership?.tenant_id, auth.user?.id]);
   useEffect(() => {
     if (!isLogged) return;
     let inactivityTimer: NodeJS.Timeout;
@@ -374,12 +269,18 @@ export default function Home() {
     localStorage.setItem(userPrefsKey, JSON.stringify({ darkMode: newDark, primaryColor: newColor }));
   };
 
-  const loadTenantData = async (slug: string) => {
-    const cachedData = localStorage.getItem(`saas_cache_${slug}`);
+  const loadTenantData = async (tenantId: string) => {
+    if (!tenantId || !auth.selectedMembership || auth.selectedMembership.tenant_id !== tenantId) return;
+    const applyEmployees = (rows: EmployeeIdentity[]) => {
+      setEmployees(rows);
+      const currentEmployee = rows.find((employee) => employee.authUserId === auth.user?.id);
+      if (currentEmployee?.name) setActiveUserName(String(currentEmployee.name));
+    };
+    const cachedData = localStorage.getItem(`saas_cache_${tenantId}`);
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData);
-        if (parsed.employees) setEmployees(parsed.employees);
+        if (Array.isArray(parsed.employees)) applyEmployees(parsed.employees);
         if (parsed.customers) setCustomers(parsed.customers);
         if (parsed.services) setServices(parsed.services);
         if (parsed.rolesList) setRolesList(parsed.rolesList);
@@ -394,9 +295,9 @@ export default function Home() {
     }
 
     try {
-      const cloudData = await getAllTenantDataCloud(slug);
+      const cloudData = await getAllTenantDataCloud(tenantId);
       if (cloudData) {
-        if (cloudData.employees) setEmployees(cloudData.employees);
+        if (Array.isArray(cloudData.employees)) applyEmployees(cloudData.employees);
         if (cloudData.customers) setCustomers(cloudData.customers);
         if (cloudData.services) setServices(cloudData.services);
         if (cloudData.rolesList) setRolesList(cloudData.rolesList);
@@ -408,7 +309,7 @@ export default function Home() {
         if (cloudData.appointments) setAppointments(cloudData.appointments);
         if (cloudData.attendances) setAttendances(cloudData.attendances);
 
-        localStorage.setItem(`saas_cache_${slug}`, JSON.stringify(cloudData));
+        localStorage.setItem(`saas_cache_${tenantId}`, JSON.stringify(cloudData));
       }
     } catch (e) {
       console.error("Erro ao sincronizar dados unificados da nuvem:", e);
@@ -433,8 +334,8 @@ export default function Home() {
       [key]: data
     };
 
-    await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
-    localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
+    await saveAllTenantDataCloud(currentCompany.id, currentCompany.slug, currentPayload);
+    localStorage.setItem(`saas_cache_${currentCompany.id}`, JSON.stringify(currentPayload));
   };
 
   const updateCompanyInMasterDb = async (updatedFields: any) => {
@@ -446,121 +347,20 @@ export default function Home() {
     const { error } = await supabase
       .from('tenants')
       .update(updatedFields)
-      .eq('slug', currentCompany.slug);
+      .eq('id', currentCompany.id);
     if (error) {
       console.error("Erro ao atualizar tenant na nuvem:", error);
     }
   };
 
-  const handleClientLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-
+  const handleLogout = async () => {
+    recordSystemLog("Logout da equipe realizado");
     try {
-      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      const tenantsList = (!error && savedTenants && savedTenants.length > 0) ? savedTenants : [currentCompany];
-
-      let authCompany = null;
-      let matchedRole = "Gestor";
-      let matchedName = "Usuário";
-      let matchedEmail = "";
-
-      const cleanInput = loginUser.trim().toLowerCase();
-      const cleanPass = loginPass.trim();
-      const securePassHash = hashPassword(cleanPass);
-
-      for (const tenant of tenantsList) {
-        if (!tenant) continue;
-        const tenantLogins = tenant.logins || [];
-        const match = tenantLogins.find(
-          (l: any) =>
-            (l.user.toLowerCase() === cleanInput || (l.email && l.email.toLowerCase() === cleanInput)) &&
-            (l.passwordHash === cleanPass || l.passwordHash === securePassHash)
-        );
-        if (match) {
-          authCompany = tenant;
-          matchedRole = match.role || "Gestor";
-          matchedName = match.name || tenant.owner_name || tenant.ownerName || "Usuário";
-          matchedEmail = match.email || match.user || cleanInput;
-          break;
-        }
-      }
-
-      if (authCompany) {
-        if (authCompany.status === "Bloqueado") {
-          setIsTenantBlocked(true);
-          return;
-        }
-
-        if (rememberCredentials) {
-          localStorage.setItem("machine_remember_creds", "true");
-          localStorage.setItem("machine_saved_user", loginUser.trim());
-          localStorage.setItem("machine_saved_pass", loginPass.trim());
-        } else {
-          localStorage.removeItem("machine_remember_creds");
-          localStorage.removeItem("machine_saved_user");
-          localStorage.removeItem("machine_saved_pass");
-        }
-
-        const normalizedAuth = {
-          ...authCompany,
-          companyName: authCompany.company_name || authCompany.companyName,
-          planName: authCompany.plan_name || authCompany.planName,
-          allowedModules: authCompany.allowed_modules || authCompany.allowedModules || {},
-          moduleRoles: authCompany.module_roles || authCompany.moduleRoles || {}
-        };
-
-        setCurrentCompany(normalizedAuth);
-        setActiveUserName(matchedName);
-        setActiveUserRole(matchedRole);
-        setActiveUserEmail(matchedEmail);
-
-        localStorage.setItem("saas_active_session", JSON.stringify({
-          slug: normalizedAuth.slug,
-          name: matchedName,
-          role: matchedRole,
-          email: matchedEmail
-        }));
-
-        setSalonConfig(prev => ({ ...prev, name: normalizedAuth.companyName }));
-        await loadTenantData(normalizedAuth.slug);
-        setIsLogged(true);
-
-        recordSystemLog(`Login efetuado com sucesso (${matchedRole})`);
-
-        const rNorm = matchedRole.toLowerCase();
-        if (rNorm.includes("colaborador")) {
-          setActiveTab("calendar");
-        } else {
-          setActiveTab("dashboard");
-        }
-
-      } else {
-        setLoginError("Usuário, e-mail ou senha incorretos.");
-      }
-    } catch (err) {
-      console.error(err);
-      setLoginError("Erro na autenticação com a nuvem.");
+      await auth.signOut();
+    } catch {
+      setIsLogged(false);
     }
   };
-
-  const handleLogout = () => {
-    recordSystemLog("Logout do sistema realizado");
-    localStorage.removeItem("saas_active_tenant");
-    localStorage.removeItem("saas_active_session");
-    localStorage.removeItem("master_bypass_auth");
-    localStorage.removeItem("master_bypass_slug");
-    localStorage.removeItem("master_bypass_login_name");
-    localStorage.removeItem("master_bypass_login_role");
-    
-    setIsLogged(false); // Força a atualização do ecrã para mostrar o login
-    
-    // Força o redirecionamento limpo da página
-    if (typeof window !== "undefined") {
-      window.location.href = window.location.pathname;
-    }
-  };
-
   const stockSummary = useMemo(() => {
     return products.map(prod => {
       const entries = stockMoves.filter(m => m.productName === prod.name && m.type === "Entrada").reduce((a, b) => a + b.quantity, 0);
@@ -828,7 +628,6 @@ export default function Home() {
 
   const [empRoles, setEmpRoles] = useState<string[]>([]);
   const [empEmail, setEmpEmail] = useState("");
-  const [empPass, setEmpPass] = useState("");
   const [empSystemRole, setEmpSystemRole] = useState<"Gestor" | "Colaborador">("Colaborador");
 
   const [saleProductName, setSaleProductName] = useState("");
@@ -858,8 +657,8 @@ export default function Home() {
 
   const loggedEmployeeObject = useMemo(() => {
     if (isManager) return null;
-    return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
-  }, [isManager, employees, activeUserName]);
+    return employees.find(e => e.authUserId === auth.user?.id) || null;
+  }, [isManager, employees, auth.user?.id]);
 
   const allTabs = [
     ...(isManager ? [{ id: "dashboard", label: "Dashboard Geral", icon: <LayoutDashboard size={17} /> }] : []),
@@ -895,19 +694,23 @@ export default function Home() {
     return true;
   });
 
+  if (isTenantBlocked) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-5 text-slate-100">
+        <section className="max-w-md space-y-3 rounded-3xl border border-slate-800 bg-slate-900 p-7 text-center">
+          <h1 className="text-lg font-black">Empresa indisponível</h1>
+          <p className="text-sm text-slate-300">Esta empresa está bloqueada para acesso.</p>
+          <button onClick={() => void auth.signOut()} className="rounded-xl bg-slate-700 px-4 py-3 text-xs font-bold">Sair</button>
+        </section>
+      </main>
+    );
+  }
+  if (!isLogged || !currentCompany) return <TenantAuthEntry>{null}</TenantAuthEntry>;
+
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative`}>
       <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-10">
         <div>
-          {isMasterBypassActive && (
-            <div className="mb-4 p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl space-y-1.5 text-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">Modo Suporte Master</span>
-              <a href="/master" className="text-[11px] bg-amber-600 hover:bg-amber-500 text-white font-bold py-1.5 px-3 rounded-lg block transition shadow cursor-pointer">
-                ← Voltar ao Master
-              </a>
-            </div>
-          )}
-
           <div className="mb-6 px-2">
             <div className="flex items-center gap-2 font-bold text-lg mb-1">
               {renderCompanyLogo("w-6 h-6", 22)}
@@ -983,7 +786,7 @@ export default function Home() {
             {activeTab === "team" && isManager && (
               <div className="flex items-center gap-2">
                 <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"><Briefcase size={14} /> Gerenciar Funções/Cargos</button>
-                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Cabeleireiro"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("employee"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Cadastrar Colaborador</button>
+                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Cabeleireiro"]); setEmpEmail(""); setEmpSystemRole("Colaborador"); setModalType("employee"); }} className={`${theme.buttonBg} text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer`}><Plus size={16} /> Cadastrar Colaborador</button>
               </div>
             )}
             {activeTab === "stock" && isManager && (
@@ -1306,7 +1109,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Cabeleireiro"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Cabeleireiro"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Cabeleireiro"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Cabeleireiro"]); setEmpEmail(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("employee"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -2374,42 +2177,70 @@ export default function Home() {
             {modalType === "employee" && (
               <form onSubmit={e => {
                 e.preventDefault();
-                const primaryRole = empRoles[0] || rolesList[0] || "Cabeleireiro";
-                if (editingId) {
-                  const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
-                  setEmployees(updated);
-                  saveTenantData("employees", updated);
-                  recordSystemLog(`Editou colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && currentCompany.logins) {
-                    const updatedLogins = currentCompany.logins.map((l: any) => l.name === formName ? { ...l, role: empSystemRole } : l);
-                    updateCompanyInMasterDb({ logins: updatedLogins });
+                void (async () => {
+                  const primaryRole = empRoles[0] || rolesList[0] || "Cabeleireiro";
+                  if (editingId) {
+                    const existing = employees.find((employee) => employee.id === editingId);
+                    const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole } : emp);
+                    setEmployees(updated);
+                    await saveTenantData("employees", updated);
+                    recordSystemLog(`Editou colaborador: ${formName}`);
+                    if (existing?.systemRole !== empSystemRole) {
+                      alert("O cargo de acesso é controlado pela associação Auth e não pode ser alterado por esta tela.");
+                    }
+                    setModalType(null);
+                    return;
                   }
-                } else {
-                  const newEmp = { id: `e-${Date.now()}`, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
+
+                  if (empSystemRole === "Gestor" && !empEmail.trim()) {
+                    alert("Informe um e-mail para enviar o convite de acesso de gestor.");
+                    return;
+                  }
+
+                  let authUserId: string | undefined;
+                  if (empEmail.trim()) {
+                    const invitedRole = empSystemRole === "Gestor" ? "manager" : "employee";
+                    const response = await fetch("/api/team/invite", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ tenantId: auth.selectedMembership?.tenant_id, email: empEmail, role: invitedRole }),
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || result.accepted !== true || typeof result.userId !== "string") {
+                      alert(typeof result.error === "string" ? result.error : "Não foi possível enviar o convite.");
+                      return;
+                    }
+                    authUserId = result.userId;
+                  }
+
+                  const newEmp = {
+                    id: `e-${Date.now()}`,
+                    name: formName,
+                    phone: formPhone,
+                    email: empEmail.trim() || undefined,
+                    authUserId,
+                    roles: empRoles,
+                    role: primaryRole,
+                    systemRole: empSystemRole,
+                    schedule: DEFAULT_EMPLOYEE_SCHEDULE,
+                  };
                   const updated = [...employees, newEmp];
                   setEmployees(updated);
-                  saveTenantData("employees", updated);
+                  await saveTenantData("employees", updated);
                   recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && empEmail && empPass) {
-                    const secureHash = hashPassword(empPass);
-                    const newLogin = { name: formName, email: empEmail, user: empEmail.split("@")[0], passwordHash: secureHash, role: empSystemRole };
-                    const updatedLogins = [...(currentCompany.logins || []), newLogin];
-                    updateCompanyInMasterDb({ logins: updatedLogins });
-                  }
-                }
-                setModalType(null);
+                  setModalType(null);
+                })().catch(() => alert("Não foi possível salvar os dados da equipe. Tente novamente."));
               }} className="space-y-3">
                 <div><label className="font-bold block mb-1">Nome Completo *</label><input required placeholder="Mariana" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(19) 99999-9999" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 
                 <div>
                   <label className="font-bold block mb-1">Cargo no Sistema (Gestor ou Colaborador) *</label>
-                  <select value={empSystemRole} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600">
-                    <option value="Gestor">Gestor (Acesso administrativo ao painel)</option>
+                  <select value={empSystemRole} disabled={Boolean(editingId)} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600 disabled:opacity-60">
+                    {auth.selectedMembership?.role === "owner" && <option value="Gestor">Gestor (Acesso administrativo ao painel)</option>}
                     <option value="Colaborador">Colaborador (Acesso restrito à agenda própria)</option>
                   </select>
+                  {editingId && <p className="text-[11px] text-slate-500">O cargo de acesso é administrado pela associação do usuário autenticado.</p>}
                 </div>
 
                 <div>
@@ -2435,9 +2266,9 @@ export default function Home() {
 
                 {!editingId && (
                   <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
-                    <span className="font-bold text-indigo-600 block">Acesso de Login (E-mail e Senha):</span>
+                    <span className="font-bold text-indigo-600 block">Convite de acesso (opcional para colaborador operacional):</span>
                     <input type="email" placeholder="funcionario@email.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
-                    <input type="password" placeholder="Senha inicial" value={empPass} onChange={e => setEmpPass(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                    <p className="text-[11px] text-slate-500">A senha será definida pelo próprio usuário pelo convite do Supabase Auth. Gestores precisam de e-mail e convite.</p>
                   </div>
                 )}
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Colaborador</button>

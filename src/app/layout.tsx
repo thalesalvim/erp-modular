@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,7 +27,7 @@ export default function RootLayout({
         <link rel="icon" href={handySvgDataUri} />
       </head>
       <body className={`${inter.className} relative min-h-screen`}>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
 
         {/* Marca d'água corporativa HandyHub fixa no canto inferior direito de TODAS as páginas do sistema */}
         <div className="fixed bottom-3 right-4 z-[9999] flex items-center gap-2 opacity-30 hover:opacity-80 transition pointer-events-none select-none">

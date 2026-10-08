@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -44,29 +44,8 @@ import {
   ChevronUp
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-function hashPassword(pass: string): string {
-  try {
-    let hash = 0;
-    for (let i = 0; i < pass.length; i++) {
-      const char = pass.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return "sec_" + Math.abs(hash).toString(36) + "_" + btoa(pass).substring(0, 6);
-  } catch (e) {
-    return "sec_fallback_" + pass;
-  }
-}
-
-function validatePasswordStrength(pass: string): string | null {
-  if (pass.length < 8) return "A senha precisa ter no mínimo 8 caracteres.";
-  if (!/[A-Z]/.test(pass)) return "A senha precisa ter pelo menos 1 letra maiúscula.";
-  if (!/[a-z]/.test(pass)) return "A senha precisa ter pelo menos 1 letra minúscula.";
-  if (!/[0-9]/.test(pass)) return "A senha precisa ter pelo menos 1 número.";
-  if (!/[^A-Za-z0-9]/.test(pass)) return "A senha precisa ter pelo menos 1 caractere especial.";
-  return null;
-}
+import { useAuth } from '@/components/auth/AuthProvider';
+import { AuthLoginForm } from '@/components/auth/AuthEntry';
 
 export interface SystemLog {
   id: string;
@@ -87,15 +66,6 @@ export interface TenantInvoice {
   receiptUrl?: string;
   receiptName?: string;
   cardLast4?: string;
-}
-
-export interface TenantLogin {
-  name: string;
-  email?: string;
-  user: string;
-  passwordHash: string;
-  role: "Dono" | "Gestor" | "Colaborador";
-  twoFactorEnabled?: boolean;
 }
 
 export interface ContractDocument {
@@ -120,7 +90,6 @@ export interface TenantAccount {
   allowedModules: { [key: string]: boolean };
   moduleRoles?: { [key: string]: string[] };
   invoices: TenantInvoice[];
-  logins: TenantLogin[];
   contractDocument: ContractDocument | null;
   internalNotes: string;
   logoType: "icon" | "image";
@@ -139,6 +108,12 @@ const MASTER_PLANS_LIST = [
   { name: "Consultoria Semanal", price: 319.90, desc: "Consultoria 4x no mês" },
   { name: "Consultoria Avulsa", price: 120.00, desc: "Sessão única de consultoria" }
 ];
+
+const MASTER_TENANT_COLUMNS = [
+  'id', 'slug', 'company_name', 'owner_name', 'owner_email', 'plan_name', 'monthly_fee',
+  'due_day', 'status', 'allowed_modules', 'invoices', 'logo_type', 'logo_icon', 'logo_url',
+  'primary_color', 'created_at',
+].join(',');
 
 const PLAN_DEFAULT_MODULES: Record<string, Record<string, boolean>> = {
   "Básico": {
@@ -199,21 +174,10 @@ const MODULE_NAMES_LIST = [
   { id: "dre", label: "Módulo DRE Gerencial (Exclusivo Ultra)" },
   { id: "settings", label: "Configurações Gerais" }
 ];
+const AVAILABLE_ROLES_LIST = ["Dono", "Gestor", "Colaborador"];
 
-const AVAILABLE_ROLES_LIST: Array<"Dono" | "Gestor" | "Colaborador"> = ["Dono", "Gestor", "Colaborador"];
-
-export default function MasterPanel() {
-  const [isMounted, setIsMounted] = useState(false);
-  const [isMasterAuth, setIsMasterAuth] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("master_session_active") === "true";
-    }
-    return false;
-  });
-
-  const [userInput, setUserInput] = useState("");
-  const [passInput, setPassInput] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+function MasterWorkspace() {
+  const auth = useAuth();
 
   const [tenants, setTenants] = useState<TenantAccount[]>([]);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
@@ -243,18 +207,6 @@ export default function MasterPanel() {
   const [newPlan, setNewPlan] = useState("Pro");
   const [newFee, setNewFee] = useState(149.90);
   const [newDueDay, setNewDueDay] = useState(10);
-  const [newInitialUser, setNewInitialUser] = useState("");
-  const [newInitialPass, setNewInitialPass] = useState("");
-  const [newEnable2FA, setNewEnable2FA] = useState(false);
-
-  const [isNewLoginModalOpen, setIsNewLoginModalOpen] = useState(false);
-  const [editingLoginIdx, setEditingLoginIdx] = useState<number | null>(null);
-  const [loginName, setLoginName] = useState("");
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginUsername, setLoginUsername] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginRole, setLoginRole] = useState<"Dono" | "Gestor" | "Colaborador">("Gestor");
-  const [login2FA, setLogin2FA] = useState(false);
 
   const [isEditInvoiceModalOpen, setIsEditInvoiceModalOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
@@ -268,13 +220,13 @@ export default function MasterPanel() {
   const [collapsedInvoices, setCollapsedInvoices] = useState<{ [id: string]: boolean }>({});
 
   useEffect(() => {
-    setIsMounted(true);
     const fetchTenants = async () => {
       try {
-        const { data, error } = await supabase.from('tenants').select('*');
+        const { data, error } = await supabase.from('tenants').select(MASTER_TENANT_COLUMNS);
+        if (error) throw error;
         if (!error && data && data.length > 0) {
           const formatted: TenantAccount[] = data.map((t: any) => ({
-            id: t.id || `t-${Math.random()}`,
+            id: t.id,
             slug: t.slug || "studio-hair",
             companyName: t.company_name || t.companyName || "Empresa",
             document: t.document || "00.000.000/0001-00",
@@ -289,7 +241,6 @@ export default function MasterPanel() {
             allowedModules: t.allowed_modules || t.allowedModules || { dre: true },
             moduleRoles: t.module_roles || t.moduleRoles || {},
             invoices: t.invoices || [],
-            logins: t.logins || [],
             contractDocument: t.contractDocument || null,
             internalNotes: t.internalNotes || "Contrato ativo.",
             logoType: t.logo_type || "icon",
@@ -298,18 +249,12 @@ export default function MasterPanel() {
             createdAt: t.created_at || "2026-01-01"
           }));
           setTenants(formatted);
-          localStorage.setItem("saas_tenants_db", JSON.stringify(formatted));
           if (formatted.length > 0 && !selectedTenantId) {
             setSelectedTenantId(formatted[0].id);
           }
         }
-      } catch (err) {
-        const saved = localStorage.getItem("saas_tenants_db");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setTenants(parsed);
-          if (parsed.length > 0) setSelectedTenantId(parsed[0].id);
-        }
+      } catch {
+        setFeedbackMsg('Não foi possível carregar empresas do servidor.');
       }
     };
     fetchTenants();
@@ -333,28 +278,13 @@ export default function MasterPanel() {
     localStorage.setItem("saas_system_audit_logs", JSON.stringify(updated));
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    const cleanUser = userInput.trim().toLowerCase();
-    const cleanPass = passInput.trim();
-
-    if ((cleanUser === "master" || cleanUser === "thaleco7") && cleanPass === "Isabela123!") {
-      setIsMasterAuth(true);
-      localStorage.setItem("master_session_active", "true");
-      logAction("HandyHub", "Login Master realizado com sucesso");
-    } else {
-      setErrorMsg("Credenciais incorretas.");
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+    } catch {
+      setFeedbackMsg('A sessão foi encerrada localmente; valide a conectividade ao Auth.');
     }
   };
-
-  const handleLogout = () => {
-    setIsMasterAuth(false);
-    localStorage.removeItem("master_session_active");
-    localStorage.removeItem("saas_active_tenant");
-    window.location.href = "/";
-  };
-
   const selectedTenant = useMemo(() => {
     return tenants.find((t) => t.id === selectedTenantId) || tenants[0] || null;
   }, [tenants, selectedTenantId]);
@@ -393,19 +323,6 @@ export default function MasterPanel() {
     return { totalMRR, activeCount, blockedCount, pendingCount };
   }, [tenants]);
 
-  const launchTenantDashboard = (tenant: TenantAccount) => {
-    if (typeof window !== "undefined") {
-      const bypassToken = "bypass_master_" + Date.now();
-      localStorage.setItem("saas_active_tenant", tenant.slug);
-      localStorage.setItem("master_bypass_auth", bypassToken);
-      localStorage.setItem("master_bypass_slug", tenant.slug);
-      localStorage.setItem("master_bypass_login_name", tenant.ownerName || "Dono");
-      localStorage.setItem("master_bypass_login_role", "Dono");
-      logAction(tenant.companyName, "Acesso Master Bypass ao Dashboard");
-      window.open(`/?c=${tenant.slug}&master_bypass=${bypassToken}`, "_blank");
-    }
-  };
-
   const toggleTenantBlock = async (tenantId: string) => {
     const target = tenants.find(t => t.id === tenantId);
     if (!target) return;
@@ -413,7 +330,7 @@ export default function MasterPanel() {
 
     const updatedList = tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -443,7 +360,7 @@ export default function MasterPanel() {
     } : t);
     
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -479,7 +396,7 @@ export default function MasterPanel() {
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, moduleRoles: updatedModuleRoles } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     logAction(selectedTenant.companyName, `Alterou permissão do cargo [${roleName}] no módulo [${moduleId}]`);
     setFeedbackMsg(`✅ Acesso do cargo ${roleName} atualizado!`);
@@ -507,7 +424,7 @@ export default function MasterPanel() {
 
       const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
       setTenants(updatedList);
-      localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+      
 
       try {
         await supabase
@@ -565,7 +482,7 @@ export default function MasterPanel() {
     const updatedInvoices = [...invoices, newInvoice];
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -613,7 +530,7 @@ export default function MasterPanel() {
     });
 
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -654,7 +571,7 @@ export default function MasterPanel() {
 
     const remaining = tenants.filter(t => t.id !== selectedTenant.id);
     setTenants(remaining);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(remaining));
+    
     if (remaining.length > 0) {
       setSelectedTenantId(remaining[0].id);
     } else {
@@ -678,7 +595,7 @@ export default function MasterPanel() {
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: newDoc } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
     logAction(selectedTenant.companyName, `Anexou o contrato: ${file.name}`);
     setFeedbackMsg("✅ Contrato anexado!");
     setTimeout(() => setFeedbackMsg(""), 3000);
@@ -688,7 +605,7 @@ export default function MasterPanel() {
     if (!selectedTenant || !confirm("Remover contrato?")) return;
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, contractDocument: null } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
     logAction(selectedTenant.companyName, "Removeu o contrato");
   };
 
@@ -733,7 +650,7 @@ export default function MasterPanel() {
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -755,7 +672,7 @@ export default function MasterPanel() {
 
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, invoices: updatedInvoices } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -773,7 +690,7 @@ export default function MasterPanel() {
     if (!selectedTenant) return;
     const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, internalNotes: currentNotes } : t);
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -810,7 +727,7 @@ export default function MasterPanel() {
       return t;
     });
     setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     try {
       await supabase
@@ -824,166 +741,47 @@ export default function MasterPanel() {
     setTimeout(() => setFeedbackMsg(""), 3000);
   };
 
-  const handleSaveLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTenant) return;
-    setModalError("");
-
-    const cleanEmail = loginEmail.trim().toLowerCase();
-
-    try {
-      const { data: allTenants } = await supabase.from('tenants').select('*');
-      if (allTenants) {
-        for (const t of allTenants) {
-          if (t.slug === selectedTenant.slug) continue;
-          const lgs = t.logins || [];
-          const exists = lgs.some((l: any) => l.email?.toLowerCase() === cleanEmail || l.user?.toLowerCase() === cleanEmail);
-          if (exists) {
-            alert("Este e-mail já está cadastrado no sistema.");
-            return;
-          }
-        }
-      }
-    } catch (err) {}
-
-    const cleanUser = loginUsername.trim().toLowerCase();
-    const loginsList = [...(selectedTenant.logins || [])];
-    const finalPasswordHash = loginPassword ? hashPassword(loginPassword) : loginsList[editingLoginIdx!].passwordHash;
-
-    if (editingLoginIdx !== null) {
-      loginsList[editingLoginIdx] = {
-        name: loginName,
-        email: cleanEmail,
-        user: cleanUser,
-        passwordHash: finalPasswordHash,
-        role: loginRole,
-        twoFactorEnabled: login2FA
-      };
-      logAction(selectedTenant.companyName, `Editou o acesso: ${cleanUser}`);
-    } else {
-      loginsList.push({
-        name: loginName,
-        email: cleanEmail,
-        user: cleanUser,
-        passwordHash: finalPasswordHash,
-        role: loginRole,
-        twoFactorEnabled: login2FA
-      });
-      logAction(selectedTenant.companyName, `Criou novo acesso: ${cleanUser}`);
-    }
-
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: loginsList } : t);
-    setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ logins: loginsList })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
-
-    setIsNewLoginModalOpen(false);
-    setEditingLoginIdx(null);
-    setFeedbackMsg("✅ Acesso salvo!");
-    setTimeout(() => setFeedbackMsg(""), 3000);
-  };
-
-  const openEditLoginModal = (loginItem: TenantLogin, idx: number) => {
-    setEditingLoginIdx(idx);
-    setLoginName(loginItem.name);
-    setLoginEmail(loginItem.email || "");
-    setLoginUsername(loginItem.user);
-    setLoginPassword("");
-    setLoginRole(loginItem.role);
-    setLogin2FA(loginItem.twoFactorEnabled || false);
-    setModalError("");
-    setIsNewLoginModalOpen(true);
-  };
-
-  const handleDeleteLogin = async (userIndex: number) => {
-    if (!selectedTenant || !confirm("Remover este acesso?")) return;
-    if (selectedTenant.logins.length <= 1) {
-      alert("A empresa precisa ter pelo menos 1 acesso.");
-      return;
-    }
-    const targetUser = selectedTenant.logins[userIndex]?.user;
-    const updatedLogins = selectedTenant.logins.filter((_, idx: number) => idx !== userIndex);
-
-    const updatedList = tenants.map(t => t.id === selectedTenant.id ? { ...t, logins: updatedLogins } : t);
-    setTenants(updatedList);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
-
-    try {
-      await supabase
-        .from('tenants')
-        .update({ logins: updatedLogins })
-        .eq('slug', selectedTenant.slug);
-    } catch (e) {}
-
-    logAction(selectedTenant.companyName, `Removeu o usuário: ${targetUser}`);
-  };
-
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError("");
 
     const checkEmail = newEmail.trim().toLowerCase();
-    const initialUser = newInitialUser.trim().toLowerCase();
-
-    try {
-      const { data: allTenants } = await supabase.from('tenants').select('*');
-      if (allTenants) {
-        for (const t of allTenants) {
-          const lgs = t.logins || [];
-          const exists = lgs.some((l: any) => l.email?.toLowerCase() === checkEmail || l.user?.toLowerCase() === checkEmail);
-          if (exists) {
-            setModalError("❌ Este e-mail já está cadastrado no sistema.");
-            return;
-          }
-        }
-      }
-    } catch (err) {}
-
-    const slug = newCompany.toLowerCase().trim().replace(/[^a-z0-9]/g, "-");
-    const initialPass = newInitialPass.trim();
-
-    const passErr = validatePasswordStrength(initialPass);
-    if (passErr) {
-      setModalError(`❌ ${passErr}`);
+    if (!checkEmail.includes('@')) {
+      setModalError('Informe um e-mail de contato válido.');
       return;
     }
-
+    const slug = newCompany.toLowerCase().trim().replace(/[^a-z0-9]/g, '-');
     const defaultModsForNew = PLAN_DEFAULT_MODULES[newPlan] || PLAN_DEFAULT_MODULES["Pro"];
 
     const newTenantData = {
       slug,
       company_name: newCompany,
-      document: newDocument || "Não informado",
       owner_name: newOwner,
       owner_email: checkEmail,
-      owner_phone: newPhone,
       plan_name: newPlan,
       monthly_fee: Number(newFee) || 149.90,
       due_day: Number(newDueDay) || 10,
       status: "Ativo" as const,
       allowed_modules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" as const }],
-      logins: [{ name: newOwner, email: checkEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono" as const, twoFactorEnabled: newEnable2FA }],
-      internalNotes: "Novo contrato cadastrado com ambiente seguro.",
       logo_type: "icon",
       logo_icon: "scissors",
       primary_color: "pink",
       created_at: new Date().toISOString().split("T")[0]
     };
 
-    let createdId = `tenant-${Date.now()}`;
+    let createdId = '';
     try {
-      const { data, error } = await supabase.from('tenants').insert([newTenantData]).select();
-      if (!error && data && data[0]) {
-        createdId = data[0].id;
+      const { data, error } = await supabase.from('tenants').insert([newTenantData]).select('id').single();
+      if (error || !data?.id) {
+        setModalError('Não foi possível cadastrar a empresa. Nenhuma credencial Auth foi criada.');
+        return;
       }
-    } catch (e) {}
+      createdId = data.id;
+    } catch {
+      setModalError('Não foi possível cadastrar a empresa. Nenhuma credencial Auth foi criada.');
+      return;
+    }
 
     const formatted: TenantAccount = {
       id: createdId,
@@ -1000,7 +798,6 @@ export default function MasterPanel() {
       autoBlockGraceDays: 5,
       allowedModules: defaultModsForNew,
       invoices: [{ id: `inv-${Date.now()}`, referenceMonth: "2026-10", amount: Number(newFee) || 149.90, dueDate: `2026-10-${String(newDueDay).padStart(2, "0")}`, status: "Aberto" }],
-      logins: [{ name: newOwner, email: checkEmail, user: initialUser, passwordHash: hashPassword(initialPass), role: "Dono", twoFactorEnabled: newEnable2FA }],
       contractDocument: null,
       internalNotes: "Novo contrato cadastrado.",
       logoType: "icon",
@@ -1012,7 +809,7 @@ export default function MasterPanel() {
     const updatedList = [...tenants, formatted];
     setTenants(updatedList);
     setSelectedTenantId(formatted.id);
-    localStorage.setItem("saas_tenants_db", JSON.stringify(updatedList));
+    
 
     setIsNewTenantModalOpen(false);
     setNewCompany("");
@@ -1020,12 +817,9 @@ export default function MasterPanel() {
     setNewOwner("");
     setNewEmail("");
     setNewPhone("");
-    setNewInitialUser("");
-    setNewInitialPass("");
-    setNewEnable2FA(false);
 
     logAction(formatted.companyName, `Cadastrou empresa no plano ${newPlan}`);
-    setFeedbackMsg(`Empresa "${formatted.companyName}" criada com sucesso!`);
+    setFeedbackMsg(`Empresa "${formatted.companyName}" cadastrada. O primeiro owner Auth deve ser provisionado pela Camada 1B.`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
@@ -1118,7 +912,7 @@ export default function MasterPanel() {
 
                   <div className="flex flex-col gap-2">
                     <div className="flex gap-2">
-                      <button onClick={() => launchTenantDashboard(selectedTenant)} className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"><Rocket size={14} /><span>Acessar Dashboard</span></button>
+                      <button disabled title="Acesso assistido requer fluxo server-side da Camada 1B" className="flex items-center gap-1.5 rounded-xl bg-slate-700 px-4 py-2.5 text-xs font-bold text-slate-400 disabled:cursor-not-allowed"><Rocket size={14} /><span>Suporte indisponível</span></button>
                       <button onClick={() => toggleTenantBlock(selectedTenant.id)} className={`text-xs font-bold px-3 py-2.5 rounded-xl border transition cursor-pointer ${selectedTenant.status === "Bloqueado" ? "bg-emerald-600/20 text-emerald-300 border-emerald-500/30" : "bg-rose-600/20 text-rose-300 border-rose-500/30"}`}>{selectedTenant.status === "Bloqueado" ? "Desbloquear" : "Bloquear"}</button>
                     </div>
                   </div>
@@ -1265,31 +1059,11 @@ export default function MasterPanel() {
                 )}
 
                 {activeTab === "dados" && (
-                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h4 className="font-bold text-white">E-mails e Credenciais de Acesso ao Dashboard</h4>
-                      <button onClick={() => { setEditingLoginIdx(null); setLoginName(""); setLoginEmail(""); setLoginUsername(""); setLoginPassword(""); setLogin2FA(false); setModalError(""); setIsNewLoginModalOpen(true); }} className="bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer">+ Adicionar E-mail de Acesso</button>
-                    </div>
-
-                    <div className="divide-y divide-slate-800">
-                      {selectedTenant.logins?.map((l: TenantLogin, idx: number) => (
-                        <div key={idx} className="py-3 flex justify-between items-center">
-                          <div>
-                            <strong className="text-white block text-sm">{l.name} <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded ml-2">{l.role}</span></strong>
-                            <span className="text-slate-400">E-mail: <strong>{l.email || "Não informado"}</strong> • Usuário: <code className="text-cyan-400">{l.user}</code></span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => openEditLoginModal(l, idx)} className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded cursor-pointer"><Pencil size={15} /></button>
-                            {selectedTenant.logins.length > 1 && (
-                              <button onClick={() => handleDeleteLogin(idx)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded cursor-pointer"><Trash2 size={15} /></button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-xs">
+                    <h4 className="border-b border-slate-800 pb-3 font-bold text-white">Acessos e memberships</h4>
+                    <p className="mt-3 text-slate-300">`tenants.logins` deixou de ser fonte de autenticação. Convites usam Supabase Auth e associação por tenant_id; o provisionamento do primeiro owner fica para a Camada 1B.</p>
                   </div>
                 )}
-
                 {activeTab === "logs" && (
                   <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
                     <h4 className="font-bold text-amber-400 flex items-center gap-1.5"><Activity size={15} /> Log de Auditoria: {selectedTenant.companyName}</h4>
@@ -1426,45 +1200,6 @@ export default function MasterPanel() {
       )}
 
       {/* MODAL ADICIONAR / EDITAR LOGIN */}
-      {isNewLoginModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">Adicionar E-mail & Acesso Seguro</h3>
-              <button onClick={() => setIsNewLoginModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleSaveLogin} className="space-y-3">
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">Nome da Pessoa *</label>
-                <input required placeholder="Ex: Nome Completo" value={loginName} onChange={e => setLoginName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
-              </div>
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">E-mail de Contato *</label>
-                <input required type="email" placeholder="cliente@empresa.com" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Nome de Usuário *</label>
-                  <input required placeholder="ex: nome_usuario" value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
-                </div>
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Senha (Mín. 8 chars) *</label>
-                  <input type="password" placeholder="Senha forte" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
-                </div>
-              </div>
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">Cargo *</label>
-                <select value={loginRole} onChange={e => setLoginRole(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none font-bold">
-                  {AVAILABLE_ROLES_LIST.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer">Salvar Acesso</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODAL NOVO CLIENTE */}
       {isNewTenantModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1512,13 +1247,7 @@ export default function MasterPanel() {
                 <label className="text-slate-300 font-semibold block mb-1">Telefone / WhatsApp *</label>
                 <input required placeholder="(19) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                <span className="text-[11px] font-bold text-indigo-400 block">Primeiro Acesso do Dono:</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <input required placeholder="Nome de Usuário" value={newInitialUser} onChange={e => setNewInitialUser(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
-                  <input required type="password" placeholder="Senha Forte" value={newInitialPass} onChange={e => setNewInitialPass(e.target.value)} className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-white text-xs outline-none" />
-                </div>
-              </div>
+
               <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Criar Empresa Segura</button>
             </form>
           </div>
@@ -1526,4 +1255,54 @@ export default function MasterPanel() {
       )}
     </div>
   );
+}
+
+function MasterAccessGate() {
+  const { user, loading, signOut } = useAuth();
+  const [status, setStatus] = useState<'checking' | 'allowed' | 'denied' | 'unavailable'>('checking');
+
+  useEffect(() => {
+    if (!user) {
+      setStatus('checking');
+      return;
+    }
+    const controller = new AbortController();
+    setStatus('checking');
+    void fetch('/api/auth/platform-admin', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setStatus('unavailable');
+          return;
+        }
+        setStatus(result.isPlatformAdmin === true ? 'allowed' : 'denied');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setStatus('unavailable');
+      });
+    return () => controller.abort();
+  }, [user?.id]);
+
+  if (loading) return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-300">Validando sessão…</main>;
+  if (!user) return <AuthLoginForm />;
+  if (status === 'allowed') return <MasterWorkspace />;
+  if (status === 'checking') return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-300">Verificando platform_admin…</main>;
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 p-5 text-slate-100">
+      <section className="max-w-md space-y-4 rounded-3xl border border-slate-800 bg-slate-900 p-7 text-center">
+        <h1 className="text-lg font-black">{status === 'denied' ? 'Acesso restrito' : 'Master indisponível'}</h1>
+        <p className="text-sm text-slate-300">
+          {status === 'denied'
+            ? 'Esta conta autenticada não está registrada como platform_admin.'
+            : 'A validação server-side de platform_admin não está disponível. Solicite a configuração administrativa do servidor.'}
+        </p>
+        <button onClick={() => void signOut().catch(() => undefined)} className="rounded-xl bg-slate-700 px-4 py-3 text-xs font-bold">Sair</button>
+      </section>
+    </main>
+  );
+}
+
+export default function MasterPanel() {
+  return <MasterAccessGate />;
 }

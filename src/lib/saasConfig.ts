@@ -18,14 +18,6 @@ export interface TenantInvoice {
   receiptName?: string;
 }
 
-export interface TenantLogin {
-  name: string;
-  email?: string;
-  user: string;
-  passwordHash: string;
-  role: string;
-}
-
 export interface TenantAccount {
   id: string;
   slug: string;
@@ -41,7 +33,6 @@ export interface TenantAccount {
   autoBlockGraceDays: number;
   allowedModules: Record<string, boolean>;
   invoices: TenantInvoice[];
-  logins: TenantLogin[];
   contractDocument: ContractDocument | null;
   internalNotes: string;
   logoType?: "icon" | "image";
@@ -85,15 +76,6 @@ export const INITIAL_TENANTS: TenantAccount[] = [
         amount: 149.90,
         dueDate: "2026-10-10",
         status: "Aberto"
-      }
-    ],
-    logins: [
-      {
-        name: "Gisele Alvim",
-        email: "fdsfds@gmail.com",
-        user: "gisele",
-        passwordHash: "Isabela123!",
-        role: "Proprietária / Gestora Principal"
       }
     ],
     contractDocument: {

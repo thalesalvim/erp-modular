@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { getSupabaseConfig } from './supabaseConfig';
 
 // Keep direct references: Next.js inlines NEXT_PUBLIC_* values at build time.
@@ -9,4 +9,11 @@ const config = getSupabaseConfig({
 });
 
 // Tenant filters and UI roles are not authorization; real access depends on RLS/grants.
-export const supabase = createClient(config.url, config.publicKey);
+export const supabase = createBrowserClient(config.url, config.publicKey, {
+  auth: {
+    flowType: 'pkce',
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    persistSession: true,
+  },
+});

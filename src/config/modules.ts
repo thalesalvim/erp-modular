@@ -28,7 +28,6 @@ export interface UserAccount {
   id: string;
   name: string;
   email: string;
-  password: string;
   role: "SUPER_ADMIN" | "TENANT_ADMIN";
   tenantId?: string;
 }
@@ -96,14 +95,12 @@ export const INITIAL_USERS: UserAccount[] = [
     id: "admin-master",
     name: "Thales Alvim (Super Admin)",
     email: "thalesalvim997@gmail.com",
-    password: "Isabela123!",
     role: "SUPER_ADMIN"
   },
   {
     id: "u-salao",
     name: "Gisele Gonçalves",
     email: "salao@omnigestor.com",
-    password: "123",
     role: "TENANT_ADMIN",
     tenantId: "tenant-salao"
   }

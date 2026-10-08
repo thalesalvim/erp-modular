@@ -121,16 +121,16 @@ test('the audited production project is rejected in local and preview, including
   assert.throws(() => getSupabaseConfig({ ...valid, appEnvironment: 'production' }), /produção auditada/);
 });
 
-test('the actual client module fails before createClient when configuration is missing', () => {
+test('the actual browser client module fails before SDK initialization when configuration is missing', () => {
   let creations = 0;
   assert.throws(() => loadModule('../src/lib/supabase.ts', {}, {
     './supabaseConfig': configModule,
-    '@supabase/supabase-js': { createClient: () => { creations++; } },
+    '@supabase/ssr': { createBrowserClient: () => { creations++; } },
   }), /Supabase config/);
   assert.equal(creations, 0);
 });
 
-test('the actual client module initializes the SDK with synthetic values and no network access', async () => {
+test('the actual browser client initializes the SDK with synthetic values and no network access', async () => {
   let requests = 0;
   const { supabase } = loadModule('../src/lib/supabase.ts', {
     NEXT_PUBLIC_APP_ENV: valid.appEnvironment,
@@ -138,8 +138,9 @@ test('the actual client module initializes the SDK with synthetic values and no 
     NEXT_PUBLIC_SUPABASE_ANON_KEY: valid.publicKey,
   }, {
     './supabaseConfig': configModule,
-    '@supabase/supabase-js': {
-      createClient: (url, key) => createClient(url, key, {
+    '@supabase/ssr': {
+      createBrowserClient: (url, key, options) => createClient(url, key, {
+        ...options,
         auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
         global: { fetch: () => { requests++; throw new Error('Network forbidden in configuration tests'); } },
       }),

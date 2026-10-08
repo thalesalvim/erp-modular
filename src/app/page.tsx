@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -60,25 +60,11 @@ import {
   Shield
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getTenantFromCloud, getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
-
-function hashPassword(pass: string): string {
-  if (!pass) return "";
-  const clean = String(pass).trim();
-  try {
-    let hash = 0;
-    const salt = "HandyHub_Secured_2026_@v9!_Hardened";
-    const saltedPass = clean + salt;
-    for (let i = 0; i < saltedPass.length; i++) {
-      const char = saltedPass.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return "sec_v3_" + Math.abs(hash).toString(36);
-  } catch (e) {
-    return "sec_fallback_" + clean;
-  }
-}
+import { getAllTenantDataCloud, saveAllTenantDataCloud } from '@/lib/dbService';
+import { TenantAuthEntry } from '@/components/auth/AuthEntry';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { roleLabel } from '@/lib/auth/authorization';
+import { updateOwnEmail, updateOwnPassword } from '@/lib/auth/authService';
 
 function sanitizeInput(input: string): string {
   if (typeof input !== "string") return "";
@@ -136,37 +122,26 @@ export interface SaleItem {
   notes?: string;
 }
 
+interface EmployeeIdentity {
+  authUserId?: string;
+  name?: string;
+  [field: string]: unknown;
+}
+
 export default function Home() {
+  const auth = useAuth();
   const [isMounted, setIsMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
-  const [isMasterBypassActive, setIsMasterBypassActive] = useState(false);
   
   const [activeUserName, setActiveUserName] = useState<string>("Gestor");
   const [activeUserRole, setActiveUserRole] = useState<string>("Gestor");
   const [activeUserEmail, setActiveUserEmail] = useState<string>("");
 
-  const [loginUser, setLoginUser] = useState("");
-  const [loginPass, setLoginPass] = useState("");
-  const [rememberCredentials, setRememberCredentials] = useState(false);
-  const [loginError, setLoginError] = useState("");
-  const [loginAttempts, setLoginAttempts] = useState(0); 
-  const [lockoutUntil, setLockoutUntil] = useState(0);      
   const [activeTab, setActiveTab] = useState<string>("dashboard");
-
-  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
-  const [forgotStep, setForgotStep] = useState<"identifier" | "method" | "code" | "newpass">("identifier");
-  const [forgotIdentifier, setForgotIdentifier] = useState("");
-  const [forgotTargetUser, setForgotTargetUser] = useState<any | null>(null);
-  const [forgotMethod, setForgotMethod] = useState<"email" | "sms">("email");
-  const [forgotInputCode, setForgotInputCode] = useState("");
-  const [generatedCode, setGeneratedCode] = useState("");
-  const [newPasswordInput, setNewPasswordInput] = useState("");
-  const [forgotError, setForgotError] = useState("");
-  const [forgotSuccess, setForgotSuccess] = useState("");
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -266,7 +241,7 @@ export default function Home() {
 
   const [empRoles, setEmpRoles] = useState<string[]>([]);
   const [empEmail, setEmpEmail] = useState("");
-  const [empPass, setEmpPass] = useState("");
+  const [employeeInviteError, setEmployeeInviteError] = useState("");
   const [empSystemRole, setEmpSystemRole] = useState<"Gestor" | "Colaborador">("Colaborador");
 
   const [saleProductName, setSaleProductName] = useState("");
@@ -300,8 +275,8 @@ export default function Home() {
 
   const loggedEmployeeObject = useMemo(() => {
     if (isManager) return null;
-    return employees.find(e => e.name.toLowerCase() === activeUserName.toLowerCase()) || null;
-  }, [isManager, employees, activeUserName]);
+    return employees.find(e => e.authUserId === auth.user?.id) || null;
+  }, [isManager, employees, auth.user?.id]);
 
   const recordSystemLog = (actionDesc: string) => {
     if (!currentCompany) return;
@@ -329,7 +304,7 @@ export default function Home() {
     const { error } = await supabase
       .from('tenants')
       .update(updatedFields)
-      .eq('slug', currentCompany.slug);
+      .eq('id', currentCompany.id);
     if (error) {
       console.error("Erro ao atualizar tenant na nuvem:", error);
     }
@@ -357,16 +332,22 @@ export default function Home() {
       attendances,
       [key]: data
     };
-    await saveAllTenantDataCloud(currentCompany.slug, currentPayload);
-    localStorage.setItem(`saas_cache_${currentCompany.slug}`, JSON.stringify(currentPayload));
+    await saveAllTenantDataCloud(currentCompany.id, currentCompany.slug, currentPayload);
+    localStorage.setItem(`saas_cache_${currentCompany.id}`, JSON.stringify(currentPayload));
   };
 
-  const loadTenantData = async (slug: string) => {
-    const cachedData = localStorage.getItem(`saas_cache_${slug}`);
+  const loadTenantData = async (tenantId: string) => {
+    if (!tenantId || !auth.selectedMembership || auth.selectedMembership.tenant_id !== tenantId) return;
+    const applyEmployees = (rows: EmployeeIdentity[]) => {
+      setEmployees(rows);
+      const currentEmployee = rows.find((employee) => employee.authUserId === auth.user?.id);
+      if (currentEmployee?.name) setActiveUserName(String(currentEmployee.name));
+    };
+    const cachedData = localStorage.getItem(`saas_cache_${tenantId}`);
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData);
-        if (parsed.employees) setEmployees(parsed.employees);
+        if (Array.isArray(parsed.employees)) applyEmployees(parsed.employees);
         if (parsed.customers) setCustomers(parsed.customers);
         if (parsed.services) setServices(parsed.services);
         if (parsed.rolesList) setRolesList(parsed.rolesList);
@@ -381,9 +362,9 @@ export default function Home() {
     }
 
     try {
-      const cloudData = await getAllTenantDataCloud(slug);
+      const cloudData = await getAllTenantDataCloud(tenantId);
       if (cloudData) {
-        if (cloudData.employees) setEmployees(cloudData.employees);
+        if (Array.isArray(cloudData.employees)) applyEmployees(cloudData.employees);
         if (cloudData.customers) setCustomers(cloudData.customers);
         if (cloudData.services) setServices(cloudData.services);
         if (cloudData.rolesList) setRolesList(cloudData.rolesList);
@@ -395,7 +376,7 @@ export default function Home() {
         if (cloudData.appointments) setAppointments(cloudData.appointments);
         if (cloudData.attendances) setAttendances(cloudData.attendances);
 
-        localStorage.setItem(`saas_cache_${slug}`, JSON.stringify(cloudData));
+        localStorage.setItem(`saas_cache_${tenantId}`, JSON.stringify(cloudData));
       }
     } catch (e) {
       console.error("Erro ao sincronizar dados unificados da nuvem:", e);
@@ -404,132 +385,35 @@ export default function Home() {
 
   useEffect(() => {
     setIsMounted(true);
-    const initializeApp = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const slugParam = params.get("c");
-      const masterBypassParam = params.get("master_bypass");
-      const storedBypass = localStorage.getItem("master_bypass_auth");
-      const bypassLoginName = localStorage.getItem("master_bypass_login_name");
-      const bypassLoginRole = localStorage.getItem("master_bypass_login_role");
+    const membership = auth.selectedMembership;
+    if (!membership || !auth.user) {
+      setIsLogged(false);
+      setCurrentCompany(null);
+      setActiveUserEmail("");
+      return;
+    }
 
-      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-      
-      let found = null;
-      if (!error && savedTenants && savedTenants.length > 0) {
-        if (slugParam) {
-          found = savedTenants.find((t: any) => t.slug === slugParam);
-        }
-        if (!found) {
-          const lastActiveSlug = localStorage.getItem("saas_last_active_slug");
-          if (lastActiveSlug) {
-            found = savedTenants.find((t: any) => t.slug === lastActiveSlug);
-          }
-        }
-        if (!found) {
-          found = savedTenants[0];
-        }
-      }
-
-      if (!found) {
-        found = {
-          slug: "studio-hair",
-          company_name: "Studio Hair & Beauty",
-          status: "Ativo",
-          planName: "Pro",
-          owner_name: "Gisele Alvim",
-          owner_email: "gisele@gmail.com",
-          logins: [
-            { user: "gisele", email: "gisele@gmail.com", passwordHash: hashPassword("123456"), role: "Gestor", name: "Gisele Alvim" }
-          ]
-        };
-      }
-
-      if (found) {
-        const normalizedFound = {
-          ...found,
-          companyName: found.company_name || found.companyName,
-          planName: found.plan_name || found.planName,
-          allowedModules: found.allowed_modules || found.allowedModules || {},
-          moduleRoles: found.module_roles || found.moduleRoles || {}
-        };
-
-        setCurrentCompany(normalizedFound);
-        setSalonConfig(prev => ({ ...prev, name: normalizedFound.companyName || "Studio Hair & Beauty" }));
-        localStorage.setItem("saas_last_active_slug", normalizedFound.slug);
-        
-        if (normalizedFound.status === "Bloqueado") {
-          setIsTenantBlocked(true);
-          setIsLogged(false);
-          return;
-        }
-
-        loadTenantData(normalizedFound.slug);
-
-        if (masterBypassParam && storedBypass && masterBypassParam === storedBypass) {
-          setIsMasterBypassActive(true);
-          setActiveUserName(bypassLoginName || normalizedFound.owner_name || "Gestor");
-          setActiveUserRole(bypassLoginRole || "Dono");
-          setActiveUserEmail(normalizedFound.owner_email || "");
-          setIsLogged(true);
-          setActiveTab("dashboard");
-          recordSystemLog("Acesso Master Support Mode Ativado com Segurança");
-        } else {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session && session.user) {
-            const authEmail = session.user.email;
-            const matchedLogin = normalizedFound.logins?.find(
-              (l: any) => (l.email || "").toLowerCase() === (authEmail || "").toLowerCase() || (l.user || "").toLowerCase() === (authEmail || "").toLowerCase()
-            );
-
-            if (matchedLogin) {
-              setActiveUserName(matchedLogin.name || "Gestor");
-              setActiveUserRole(matchedLogin.role || "Gestor");
-              setActiveUserEmail(authEmail || "");
-              setIsLogged(true);
-            } else {
-              setIsLogged(false);
-            }
-          } else {
-            setIsLogged(false);
-          }
-        }
-      }
+    const tenant = membership.tenant;
+    const normalizedTenant = {
+      ...tenant,
+      companyName: tenant.company_name || tenant.companyName || tenant.slug,
+      planName: tenant.plan_name || tenant.planName || "Pro",
+      allowedModules: tenant.allowed_modules || tenant.allowedModules || {},
+      moduleRoles: tenant.module_roles || tenant.moduleRoles || {},
     };
-    initializeApp();
-  }, []);
+    setCurrentCompany(normalizedTenant);
+    setSalonConfig((previous) => ({ ...previous, name: normalizedTenant.companyName }));
+    setActiveUserName(String(auth.user.user_metadata?.full_name || auth.user.email || "Usuário"));
+    setActiveUserRole(roleLabel(membership.role));
+    setActiveUserEmail(auth.user.email || "");
+    setIsTenantBlocked(normalizedTenant.status === "Bloqueado");
+    setIsLogged(normalizedTenant.status !== "Bloqueado");
 
-  useEffect(() => {
-    const currentSlug = currentCompany?.slug;
-    if (!currentSlug) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-        if (!error && savedTenants && Array.isArray(savedTenants)) {
-          const freshFound = savedTenants.find((t: any) => t.slug === currentSlug);
-          if (freshFound) {
-            const normalizedTenant = {
-              ...freshFound,
-              companyName: freshFound.company_name || freshFound.companyName,
-              planName: freshFound.plan_name || freshFound.planName,
-              allowedModules: freshFound.allowed_modules || freshFound.allowedModules || {},
-              moduleRoles: freshFound.module_roles || freshFound.moduleRoles || {}
-            };
-
-            setCurrentCompany(normalizedTenant);
-
-            if (freshFound.status === "Bloqueado") {
-              setIsTenantBlocked(true);
-              setIsLogged(false);
-            }
-          }
-        }
-      } catch (e) {}
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentCompany?.slug]);
-
+    if (normalizedTenant.status !== "Bloqueado") {
+      setActiveTab(membership.role === "employee" ? "calendar" : "dashboard");
+      void loadTenantData(membership.tenant_id);
+    }
+  }, [auth.selectedMembership?.tenant_id, auth.user?.id]);
   useEffect(() => {
     if (!isLogged) return;
     let inactivityTimer: NodeJS.Timeout;
@@ -574,107 +458,14 @@ export default function Home() {
     }
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
-  const handleClientLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-
-    const now = Date.now();
-    if (lockoutUntil > now) {
-      const waitSec = Math.ceil((lockoutUntil - now) / 1000);
-      setLoginError(`Acesso temporariamente bloqueado por segurança. Tente novamente em ${waitSec}s.`);
-      return;
-    }
-
-    try {
-      const cleanInput = sanitizeInput(loginUser.toLowerCase());
-      const cleanPass = sanitizeInput(loginPass);
-      const securePassHash = hashPassword(cleanPass);
-
-      const { data: savedTenants, error: tenantErr } = await supabase.from('tenants').select('*');
-      if (tenantErr || !savedTenants) {
-        setLoginError("Erro de comunicação com o servidor seguro.");
-        return;
-      }
-
-      let authCompany = null;
-      let matchedRole = "Gestor";
-      let matchedName = "Usuário";
-      let matchedEmail = "";
-
-      for (const t of savedTenants) {
-        if (!t || t.status === "Bloqueado") continue;
-        const logins = t.logins || [];
-        const foundMatch = logins.find(
-          (l: any) =>
-            (
-              (l.user && l.user.toLowerCase() === cleanInput) || 
-              (l.email && l.email.toLowerCase() === cleanInput) ||
-              (l.name && l.name.toLowerCase() === cleanInput)
-            ) &&
-            (
-              l.passwordHash === securePassHash || 
-              l.passwordHash === cleanPass || 
-              l.password === cleanPass ||
-              !l.passwordHash
-            )
-        );
-
-        if (foundMatch) {
-          authCompany = t;
-          matchedRole = foundMatch.role || "Gestor";
-          matchedName = foundMatch.name || t.owner_name || "Usuário";
-          matchedEmail = foundMatch.email || foundMatch.user || cleanInput;
-          break;
-        }
-      }
-
-      if (authCompany) {
-        setLoginAttempts(0);
-        setCurrentCompany(authCompany);
-        setActiveUserName(matchedName);
-        setActiveUserRole(matchedRole);
-        setActiveUserEmail(matchedEmail);
-        localStorage.setItem("saas_last_active_slug", authCompany.slug);
-
-        await loadTenantData(authCompany.slug);
-        setIsLogged(true);
-        recordSystemLog(`Autenticação realizada com sucesso (${matchedRole})`);
-
-        if (matchedRole.toLowerCase().includes("colaborador")) {
-          setActiveTab("calendar");
-        } else {
-          setActiveTab("dashboard");
-        }
-      } else {
-        const nextAttempts = loginAttempts + 1;
-        setLoginAttempts(nextAttempts);
-        if (nextAttempts >= 4) {
-          setLockoutUntil(Date.now() + 300000);
-          setLoginError("Muitas falhas consecutivas. Sistema bloqueado por segurança.");
-        } else {
-          setLoginError(`Credenciais inválidas. Tentativa ${nextAttempts}/4.`);
-        }
-      }
-    } catch (err) {
-      console.error("Erro interno de autenticação:", err);
-      setLoginError("Ocorreu um erro ao processar sua autenticação.");
-    }
-  };
-
   const handleLogout = async () => {
-    recordSystemLog("Encerramento de sessão realizado");
-    await supabase.auth.signOut();
-    localStorage.removeItem("master_bypass_auth");
-    localStorage.removeItem("master_bypass_slug");
-    localStorage.removeItem("master_bypass_login_name");
-    localStorage.removeItem("master_bypass_login_role");
-    
-    setIsLogged(false);
-    if (typeof window !== "undefined") {
-      window.location.href = "/";
+    recordSystemLog("Logout do sistema realizado");
+    try {
+      await auth.signOut();
+    } catch {
+      setIsLogged(false);
     }
   };
-
   const stockSummary = useMemo(() => {
     return products.map(prod => {
       const entries = stockMoves.filter(m => m.productName === prod.name && m.type === "Entrada").reduce((a, b) => a + b.quantity, 0);
@@ -949,369 +740,11 @@ export default function Home() {
   };
 
   if (!isLogged) {
-    return (
-      <div className="flex h-screen items-center justify-center font-sans bg-slate-950 text-slate-100 p-4 relative overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5 select-none">
-          <div className="w-[600px] h-[600px] rounded-3xl bg-gradient-to-tr from-indigo-500 to-pink-500 blur-3xl transform rotate-12" />
-        </div>
-        <div className="absolute top-10 left-10 opacity-15 pointer-events-none flex items-center gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-pink-600 flex items-center justify-center text-white font-black text-3xl shadow-2xl">
-            H
-          </div>
-        </div>
-
-        <div className="w-full max-w-md p-8 rounded-3xl border border-slate-800/80 shadow-2xl space-y-6 relative z-10 bg-slate-900/90 backdrop-blur-xl">
-          <div className="text-center space-y-3">
-            <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-indigo-600 to-pink-600 text-white mb-1 shadow-lg items-center justify-center w-14 h-14 font-black text-2xl tracking-tighter">
-              H
-            </div>
-            <h1 className="text-xl font-black tracking-tight text-white">HandyHub Cloud</h1>
-            <p className="text-xs text-slate-400">Plataforma SaaS Centralizada • Acesso Operacional</p>
-          </div>
-
-          <form onSubmit={handleClientLogin} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold block mb-1 text-slate-300">Usuário ou E-mail</label>
-              <input
-                type="text"
-                required
-                value={loginUser}
-                onChange={e => setLoginUser(e.target.value)}
-                placeholder="ex: seu.email@empresa.com"
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
-              />
-            </div>
-
-            <div>
-              <label className="font-bold block mb-1 text-slate-300">Senha de Acesso</label>
-              <input
-                type="password"
-                required
-                value={loginPass}
-                onChange={e => setLoginPass(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white focus:border-indigo-500 transition"
-              />
-              <div className="flex justify-end mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsForgotModalOpen(true);
-                    setForgotStep("identifier");
-                    setForgotIdentifier("");
-                    setForgotError("");
-                    setForgotSuccess("");
-                  }}
-                  className="text-[11px] font-bold text-indigo-400 hover:underline cursor-pointer"
-                >
-                  Esqueci a senha?
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="remember"
-                checked={rememberCredentials}
-                onChange={e => setRememberCredentials(e.target.checked)}
-                className="rounded cursor-pointer accent-indigo-600"
-              />
-              <label htmlFor="remember" className="cursor-pointer select-none text-slate-300 opacity-90">Lembrar credenciais neste computador</label>
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold text-center">
-                {loginError}
-              </div>
-            )}
-
-            {isTenantBlocked && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl font-bold text-center">
-                Estabelecimento Bloqueado por Inadimplência ou Contrato Suspenso.
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl cursor-pointer shadow-lg transition uppercase tracking-wider text-xs"
-            >
-              Entrar no Sistema
-            </button>
-          </form>
-
-          <div className="text-center pt-3 border-t border-slate-800">
-            <span className="text-[11px] text-slate-500 font-medium">HandyHub Gestão Empresarial • Segurança Garantida</span>
-          </div>
-        </div>
-
-        {isForgotModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md p-6 rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl space-y-4 text-xs text-slate-100">
-              <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
-                <h3 className="font-bold text-sm flex items-center gap-2">
-                  <KeyRound size={16} className="text-indigo-400" />
-                  <span>Recuperação de Palavra-Passe</span>
-                </h3>
-                <button
-                  onClick={() => setIsForgotModalOpen(false)}
-                  className="text-slate-400 font-bold text-base cursor-pointer hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {forgotStep === "identifier" && (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setForgotError("");
-                    try {
-                      const { data: savedTenants, error } = await supabase.from('tenants').select('*');
-                      if (error || !savedTenants) {
-                        setForgotError("Erro ao consultar base de dados.");
-                        return;
-                      }
-
-                      let foundUser = null;
-                      let foundTenant = null;
-                      const cleanQuery = sanitizeInput(forgotIdentifier.toLowerCase());
-
-                      for (const t of savedTenants) {
-                        const logins = t.logins || [];
-                        const m = logins.find((l: any) => l.user?.toLowerCase() === cleanQuery || l.email?.toLowerCase() === cleanQuery);
-                        if (m) {
-                          foundUser = m;
-                          foundTenant = t;
-                          break;
-                        }
-                      }
-
-                      if (foundUser && foundTenant) {
-                        setForgotTargetUser({ ...foundUser, tenantSlug: foundTenant.slug, tenantLogins: foundTenant.logins });
-                        setForgotStep("method");
-                      } else {
-                        setForgotError("Nenhum usuário ou e-mail encontrado com este dado.");
-                      }
-                    } catch (err) {
-                      setForgotError("Erro na conexão com a nuvem.");
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  <p className="text-slate-400">Insira o seu e-mail cadastrado ou nome de usuário para localizar a conta:</p>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-300">E-mail ou Usuário *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: seu.email@empresa.com"
-                      value={forgotIdentifier}
-                      onChange={e => setForgotIdentifier(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-white"
-                    />
-                  </div>
-
-                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
-
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsForgotModalOpen(false)}
-                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
-                    >
-                      Avançar →
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {forgotStep === "method" && (
-                <div className="space-y-4">
-                  <p className="text-slate-400">
-                    Conta encontrada: <strong className="text-white">{forgotTargetUser?.name}</strong> ({forgotTargetUser?.email || forgotTargetUser?.user})
-                  </p>
-                  <p className="font-bold text-slate-300">Escolha como deseja receber o código de verificação:</p>
-
-                  <div className="space-y-2">
-                    <div
-                      onClick={() => setForgotMethod("email")}
-                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "email" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-950"}`}
-                    >
-                      <Mail size={18} className="text-indigo-400" />
-                      <div>
-                        <strong className="block text-white">Enviar por E-mail</strong>
-                        <span className="text-[10px] text-slate-400">Código enviado para o e-mail cadastrado</span>
-                      </div>
-                    </div>
-
-                    <div
-                      onClick={() => setForgotMethod("sms")}
-                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition ${forgotMethod === "sms" ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-950"}`}
-                    >
-                      <Smartphone size={18} className="text-indigo-400" />
-                      <div>
-                        <strong className="block text-white">Enviar por SMS / WhatsApp</strong>
-                        <span className="text-[10px] text-slate-400">Código enviado para o telemóvel cadastrado</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setForgotStep("identifier")}
-                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
-                    >
-                      ← Voltar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const code = Math.floor(100000 + Math.random() * 900000).toString();
-                        setGeneratedCode(code);
-                        
-                        const destino = forgotMethod === "email" ? "seu e-mail" : "seu telemóvel";
-                        alert(`✅ Código de verificação enviado com segurança para ${destino}.`);
-                        
-                        setForgotStep("code");
-                      }}
-                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
-                    >
-                      Enviar Código ➔
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {forgotStep === "code" && (
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    setForgotError("");
-                    if (forgotInputCode.trim() === generatedCode) {
-                      setForgotStep("newpass");
-                    } else {
-                      setForgotError("Código incorreto. Verifique os dígitos informados.");
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  <p className="text-slate-400">
-                    Digite o código de verificação de 6 dígitos enviado para o seu {forgotMethod === "email" ? "e-mail" : "telemóvel"}:
-                  </p>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-300">Código de 6 Dígitos *</label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      placeholder="000000"
-                      value={forgotInputCode}
-                      onChange={e => setForgotInputCode(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none text-center font-black tracking-widest text-lg text-white"
-                    />
-                  </div>
-
-                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
-
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setForgotStep("method")}
-                      className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl cursor-pointer"
-                    >
-                      ← Voltar
-                    </button>
-                    <button
-                      type="submit"
-                      className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
-                    >
-                      Validar Código
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {forgotStep === "newpass" && (
-                <form
-                  onSubmit={async e => {
-                    e.preventDefault();
-                    setForgotError("");
-
-                    const passErr = validatePasswordStrength(newPasswordInput.trim());
-                    if (passErr) {
-                      setForgotError(passErr);
-                      return;
-                    }
-
-                    try {
-                      const newHash = hashPassword(newPasswordInput.trim());
-                      const updatedLogins = forgotTargetUser.tenantLogins.map((l: any) => {
-                        if (l.user === forgotTargetUser.user || l.email === forgotTargetUser.email) {
-                          return { ...l, passwordHash: newHash };
-                        }
-                        return l;
-                      });
-
-                      const { error } = await supabase
-                        .from('tenants')
-                        .update({ logins: updatedLogins })
-                        .eq('slug', forgotTargetUser.tenantSlug);
-
-                      if (error) {
-                        setForgotError("Erro ao salvar nova senha na nuvem.");
-                        return;
-                      }
-
-                      setForgotSuccess("🎉 Palavra-passe redefinida com sucesso!");
-                      setTimeout(() => {
-                        setIsForgotModalOpen(false);
-                        setForgotSuccess("");
-                      }, 2500);
-                    } catch (err) {
-                      setForgotError("Erro ao atualizar credenciais.");
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  <p className="text-slate-400">Crie uma nova palavra-passe forte (mínimo 8 caracteres, maiúscula, minúscula, número e símbolo):</p>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-300">Nova Palavra-Passe *</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Ex: NovaSenha@2026"
-                      value={newPasswordInput}
-                      onChange={e => setNewPasswordInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none font-medium text-white"
-                    />
-                  </div>
-
-                  {forgotError && <p className="text-rose-400 font-bold">{forgotError}</p>}
-                  {forgotSuccess && <div className="p-3 bg-emerald-500/20 text-emerald-400 font-bold rounded-xl text-center">{forgotSuccess}</div>}
-
-                  <button
-                    type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl cursor-pointer shadow"
-                  >
-                    💾 Salvar Nova Palavra-Passe
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    if (isTenantBlocked) {
+      return <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-center text-amber-300">A empresa está bloqueada. Fale com o suporte.</main>;
+    }
+    return <TenantAuthEntry>{null}</TenantAuthEntry>;
   }
-
   return (
     <div className={`flex h-screen font-sans ${bgClass} relative overflow-hidden`}>
       <div className="absolute top-3 left-4 z-30">
@@ -1335,15 +768,6 @@ export default function Home() {
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         <div>
-          {isMasterBypassActive && (
-            <div className="mb-4 p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl space-y-1.5 text-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">Modo Suporte Master</span>
-              <a href="/master" className="text-[11px] bg-amber-600 hover:bg-amber-500 text-white font-bold py-1.5 px-3 rounded-lg block transition shadow cursor-pointer">
-                ← Voltar ao Master
-              </a>
-            </div>
-          )}
-
           <div className="mb-6 px-2 pt-2">
             <div className="flex items-center gap-2 font-bold text-lg mb-1">
               {renderCompanyLogo("w-6 h-6", 22)}
@@ -1423,7 +847,7 @@ export default function Home() {
             {activeTab === "team" && isManager && (
               <div className="flex items-center gap-2">
                 <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1 shadow cursor-pointer"><Briefcase size={14} /> <span className="hidden md:inline">Funções</span></button>
-                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Colaborador</span><span className="sm:hidden">Equipe</span></button>
+                <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Colaborador</span><span className="sm:hidden">Equipe</span></button>
               </div>
             )}
             {activeTab === "stock" && isManager && (
@@ -1766,11 +1190,11 @@ export default function Home() {
                       <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
                       <div className="flex items-center gap-2">
                         <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow cursor-pointer">Gerenciar Funções</button>
-                        <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmpPass(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Colaborador</button>
+                        <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Colaborador</button>
                       </div>
                     </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador cadastrado.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(e.email || ""); setEmpPass(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("colaborador"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador cadastrado.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("colaborador"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -2436,53 +1860,14 @@ export default function Home() {
                 setEmailChangeError("Insira um endereço de e-mail válido.");
                 return;
               }
-
               try {
-                await supabase.auth.updateUser({ email: cleanNewEmail });
-
-                const { data: tenantData } = await supabase.from('tenants').select('*').eq('slug', currentCompany.slug).single();
-                if (tenantData) {
-                  let loginsList = tenantData.logins || [];
-                  if (!Array.isArray(loginsList)) loginsList = [];
-                  
-                  const activeEmailLower = (activeUserEmail || "").toLowerCase();
-                  const activeNameLower = (activeUserName || "").toLowerCase();
-
-                  let idx = loginsList.findIndex((l: any) => 
-                    (activeEmailLower && ((l.email || "").toLowerCase() === activeEmailLower || (l.user || "").toLowerCase() === activeEmailLower)) ||
-                    (activeNameLower && (l.name || "").toLowerCase() === activeNameLower)
-                  );
-
-                  if (idx === -1 && loginsList.length > 0) idx = 0;
-
-                  if (idx !== -1) {
-                    loginsList[idx] = { ...loginsList[idx], email: cleanNewEmail, user: cleanNewEmail.split("@")[0] };
-                  } else {
-                    loginsList.push({
-                      name: activeUserName || "Gestor",
-                      email: cleanNewEmail,
-                      user: cleanNewEmail.split("@")[0],
-                      role: activeUserRole || "Gestor"
-                    });
-                  }
-
-                  await supabase.from('tenants').update({ logins: loginsList }).eq('slug', currentCompany.slug);
-                  setCurrentCompany((prev: any) => ({ ...prev, logins: loginsList }));
-                }
-
-                setActiveUserEmail(cleanNewEmail);
-                setEmailChangeSuccess("🎉 E-mail alterado com sucesso!");
-                recordSystemLog(`Alterou seu próprio e-mail de acesso para ${cleanNewEmail}`);
-
-                setTimeout(() => {
-                  setIsEmailModalOpen(false);
-                  setEmailChangeSuccess("");
-                }, 2000);
-              } catch (err) {
-                console.error(err);
-                setEmailChangeError("Ocorreu um erro ao atualizar o e-mail.");
-              }
-            }} className="space-y-3">
+                const callback = new URL('/auth/callback?next=%2Fauth%2Faccount', window.location.origin).toString();
+                await updateOwnEmail(supabase, cleanNewEmail, callback);
+                setEmailChangeSuccess("Solicitação enviada. Confirme o novo e-mail pelo link do Supabase Auth.");
+                setTimeout(() => setIsEmailModalOpen(false), 2500);
+              } catch {
+                setEmailChangeError("Ocorreu um erro ao solicitar a alteração do e-mail Auth.");
+              }            }} className="space-y-3">
               <div>
                 <label className="font-bold block mb-1">Novo E-mail *</label>
                 <input
@@ -2549,63 +1934,18 @@ export default function Home() {
                 setPasswordChangeError("A nova senha e a confirmação não coincidem.");
                 return;
               }
-
               const strengthErr = validatePasswordStrength(newPasswordInputSettings);
               if (strengthErr) {
                 setPasswordChangeError(strengthErr);
                 return;
               }
-
               try {
-                const newHash = hashPassword(newPasswordInputSettings.trim());
-                
-                await supabase.auth.updateUser({
-                  password: newPasswordInputSettings.trim()
-                });
-
-                const { data: tenantData } = await supabase.from('tenants').select('*').eq('slug', currentCompany.slug).single();
-                if (tenantData) {
-                  let loginsList = tenantData.logins || [];
-                  if (!Array.isArray(loginsList)) loginsList = [];
-                  
-                  const activeEmailLower = (activeUserEmail || "").toLowerCase();
-                  const activeNameLower = (activeUserName || "").toLowerCase();
-
-                  let idx = loginsList.findIndex((l: any) => 
-                    (activeEmailLower && ((l.email || "").toLowerCase() === activeEmailLower || (l.user || "").toLowerCase() === activeEmailLower)) ||
-                    (activeNameLower && (l.name || "").toLowerCase() === activeNameLower)
-                  );
-
-                  if (idx === -1 && loginsList.length > 0) idx = 0;
-
-                  if (idx !== -1) {
-                    loginsList[idx] = { ...loginsList[idx], passwordHash: newHash };
-                  } else {
-                    loginsList.push({
-                      name: activeUserName || "Gestor",
-                      email: activeUserEmail || "admin@empresa.com",
-                      user: "admin",
-                      role: activeUserRole || "Gestor",
-                      passwordHash: newHash
-                    });
-                  }
-
-                  await supabase.from('tenants').update({ logins: loginsList }).eq('slug', currentCompany.slug);
-                  setCurrentCompany((prev: any) => ({ ...prev, logins: loginsList }));
-                }
-
-                setPasswordChangeSuccess("🎉 Senha alterada com sucesso!");
-                recordSystemLog("Alterou sua própria senha de acesso com sucesso");
-
-                setTimeout(() => {
-                  setIsPasswordModalOpen(false);
-                  setPasswordChangeSuccess("");
-                }, 2000);
-              } catch (err) {
-                console.error(err);
-                setPasswordChangeError("Ocorreu um erro inesperado ao alterar a senha.");
-              }
-            }} className="space-y-3">
+                await updateOwnPassword(supabase, newPasswordInputSettings.trim());
+                setPasswordChangeSuccess("Senha da conta Auth alterada com sucesso.");
+                setTimeout(() => setIsPasswordModalOpen(false), 2000);
+              } catch {
+                setPasswordChangeError("Ocorreu um erro ao alterar a senha da conta Auth.");
+              }            }} className="space-y-3">
               <div>
                 <label className="font-bold block mb-1">Nova Senha *</label>
                 <input
@@ -3131,38 +2471,46 @@ export default function Home() {
             {modalType === "colaborador" && (
               <form onSubmit={async e => {
                 e.preventDefault();
-                
+                setEmployeeInviteError("");
                 const primaryRole = empRoles[0] || rolesList[0] || "Profissional Principal";
                 if (editingId) {
-                  const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole } : emp);
+                  const updated = employees.map(emp => emp.id === editingId ? { ...emp, name: formName, phone: formPhone, roles: empRoles, role: primaryRole } : emp);
                   setEmployees(updated);
                   saveTenantData("employees", updated);
-                  recordSystemLog(`Editou colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && currentCompany.logins) {
-                    const updatedLogins = currentCompany.logins.map((l: any) => l.name === formName ? { ...l, role: empSystemRole } : l);
-                    updateCompanyInMasterDb({ logins: updatedLogins });
-                  }
+                  recordSystemLog(`Editou colaborador: ${formName}`);
                 } else {
-                  const newEmp = { id: `e-${Date.now()}`, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
+                  if (empSystemRole === "Gestor" && !empEmail.trim()) {
+                    setEmployeeInviteError("Informe um e-mail para enviar o convite de acesso de gestor.");
+                    return;
+                  }
+                  let authUserId: string | undefined;
+                  if (empEmail.trim()) {
+                    try {
+                      const response = await fetch('/api/team/invite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          tenantId: auth.selectedMembership?.tenant_id,
+                          email: empEmail,
+                          role: empSystemRole === 'Gestor' ? 'manager' : 'employee',
+                        }),
+                      });
+                      const result = await response.json().catch(() => ({}));
+                      if (!response.ok || result.accepted !== true || typeof result.userId !== 'string') {
+                        setEmployeeInviteError(result.error || 'Não foi possível criar o convite Auth.');
+                        return;
+                      }
+                      authUserId = result.userId;
+                    } catch {
+                      setEmployeeInviteError('Não foi possível concluir o convite Auth neste momento.');
+                      return;
+                    }
+                  }
+                  const newEmp = { id: `e-${Date.now()}`, authUserId, name: formName, phone: formPhone, roles: empRoles, role: primaryRole, systemRole: empSystemRole, schedule: DEFAULT_EMPLOYEE_SCHEDULE };
                   const updated = [...employees, newEmp];
                   setEmployees(updated);
                   saveTenantData("employees", updated);
                   recordSystemLog(`Cadastrou novo colaborador: ${formName} (${empSystemRole})`);
-
-                  if (currentCompany && empEmail && empPass) {
-                    const secureHash = hashPassword(empPass.trim());
-                    const newLogin = { 
-                      name: sanitizeInput(formName), 
-                      email: sanitizeInput(empEmail.trim().toLowerCase()), 
-                      user: sanitizeInput(empEmail.split("@")[0].toLowerCase()), 
-                      passwordHash: secureHash, 
-                      role: sanitizeInput(empSystemRole) 
-                    };
-                    
-                    const updatedLogins = [...(currentCompany.logins || []), newLogin];
-                    await updateCompanyInMasterDb({ logins: updatedLogins });
-                  }
                 }
                 setModalType(null);
               }} className="space-y-3">
@@ -3170,9 +2518,9 @@ export default function Home() {
                 <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
                 
                 <div>
-                  <label className="font-bold block mb-1">Cargo no Sistema (Gestor ou Colaborador) *</label>
-                  <select value={empSystemRole} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600">
-                    <option value="Gestor">Gestor (Acesso administrativo ao painel)</option>
+                  <label className="font-bold block mb-1">Cargo Auth do convite</label>
+                  <select disabled={Boolean(editingId)} value={empSystemRole} onChange={e => setEmpSystemRole(e.target.value as any)} className="w-full border p-2.5 rounded-xl bg-white font-bold text-pink-600 disabled:opacity-60">
+                    {auth.selectedMembership?.role === 'owner' && <option value="Gestor">Gestor</option>}
                     <option value="Colaborador">Colaborador (Acesso restrito à agenda própria)</option>
                   </select>
                 </div>
@@ -3200,11 +2548,12 @@ export default function Home() {
 
                 {!editingId && (
                   <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
-                    <span className="font-bold text-indigo-600 block">Acesso de Login (E-mail e Senha):</span>
-                    <input type="email" placeholder="email@empresa.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
-                    <input type="password" placeholder="Senha inicial" value={empPass} onChange={e => setEmpPass(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                    <span className="font-bold text-indigo-600 block">Convite Supabase Auth (opcional)</span>
+                    <input type="email" autoComplete="email" placeholder="email@empresa.com" value={empEmail} onChange={e => setEmpEmail(e.target.value)} className="w-full border p-2 rounded-lg bg-white" />
+                    <span className="text-[11px] text-slate-500">A senha será definida pela própria pessoa no convite. Sem e-mail, será criado somente o cadastro operacional.</span>
                   </div>
                 )}
+                {employeeInviteError && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs font-bold text-rose-700">{employeeInviteError}</p>}
                 <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Colaborador</button>
               </form>
             )}
