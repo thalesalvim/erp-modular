@@ -46,4 +46,3 @@ CREATE TABLE public.tenant_data (
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.tenants, public.tenant_data, public.companies TO anon, authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.companies_id_seq TO anon, authenticated, service_role;
-
