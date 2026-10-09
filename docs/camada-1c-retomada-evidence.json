@@ -1,0 +1,82 @@
+{
+  "dateLocal": "2026-10-09",
+  "timezone": "America/Sao_Paulo",
+  "status": "CAMADA_1C_AINDA_NAO_CONCLUIDA",
+  "gitHead": "2bafb7d404cba2f0f87a7757d1df6f7bfa553ce4",
+  "branch": "codex/camada-1-auth",
+  "target": {
+    "name": "handyhub-staging",
+    "ref": "gbblkkgowccjycxtexvx",
+    "status": "ACTIVE_HEALTHY"
+  },
+  "currentChecks": {
+    "unitAndDatabaseTests": { "command": "npm test", "passed": 33, "failed": 0 },
+    "typescript": { "command": "tsc --noEmit", "result": "PASS" },
+    "directedLint": { "scope": "Auth/Master existing changes and related scripts/tests", "result": "PASS", "warnings": 0, "errors": 0 },
+    "localBuild": { "runner": "scripts/run-staging-local.mjs build", "bundler": "webpack", "nextVersion": "16.3.8", "result": "PASS", "staticPages": 11, "deployment": false },
+    "stagingMetadata": {
+      "tenantCount": 2,
+      "membershipCount": 12,
+      "policyCount": 13,
+      "rlsEnabled": ["tenants", "tenant_data", "companies", "tenant_memberships", "platform_admins"],
+      "forceRlsEnabledOnListedTables": false,
+      "anonTablePrivileges": { "tenants": [], "tenant_data": [] },
+      "signupDisabled": true
+    },
+    "directApiGroups": [
+      { "group": "staging URL/ref guard", "result": "PASS" },
+      { "group": "signup configuration and anon company reads", "result": "PASS" },
+      { "group": "employee A login/membership/read A/deny B/deny invite/deny Master", "result": "PASS" },
+      { "group": "owner A login/membership/read A/deny B/deny invite B/deny Master", "result": "PASS" },
+      { "group": "platform admin Master GET", "result": "PASS", "httpStatus": 200 },
+      { "group": "anonymous Master GET", "result": "PASS", "httpStatus": 401 }
+    ],
+    "browser": {
+      "origin": "http://localhost:3000",
+      "identity": "existing synthetic employee A",
+      "sequence": ["password login", "Company A / Colaborador", "Sair", "login form", "password login", "Company A / Colaborador"],
+      "result": "PASS",
+      "logoutLatency": "Return to login was delayed in initial observations; eventual return was verified. Cause and timing not established.",
+      "capturedConsoleErrorsOrWarnings": 0,
+      "screenshot": "evidence/camada-1c-retomada-logout.jpg",
+      "realMailboxPasswordLoginCertified": false,
+      "ownerCEmployeeCEndToEndCertified": false
+    }
+  },
+  "vercel": {
+    "projectId": "prj_XAKxOzlX9P9HEQDQapS0LtOJbrgt",
+    "latestListedPreview": {
+      "id": "dpl_H2KiX7me37qN5sLk1LEcGwbRgryF",
+      "url": "https://erp-modular-p36134rjl-handy-hub2.vercel.app",
+      "commit": "2bafb7d404cba2f0f87a7757d1df6f7bfa553ce4",
+      "branch": "codex/camada-1-auth",
+      "state": "READY"
+    },
+    "latestListedProduction": {
+      "id": "dpl_CH7dqWURTMipa81rY6Qh1hNNeuMU",
+      "commit": "382155ba8a4df24b2bab46ff40f038607992ead1",
+      "branch": "main",
+      "state": "READY"
+    },
+    "explicitTeamDetailAndEnvReads": { "teamSlug": "handy-hub2", "httpStatus": 403, "cliAvailable": false },
+    "currentAliasVerified": false,
+    "previewAllCredentialsAndCallbacksVerified": false,
+    "previewFunctionalEndToEndVerified": false
+  },
+  "limits": {
+    "noNewAuthUsersTenantsMemberships": true,
+    "noNewInvitesOrRecoveryEmails": true,
+    "noDatabaseSchemaPolicyGrantChanges": true,
+    "noProductionChanges": true,
+    "noDeployPushMergeOrNewCommit": true,
+    "noPersonalPasswordsCollected": true,
+    "currentCrossTenantUpdateTestRepeated": false,
+    "historicalEvidenceNotReplaced": true
+  },
+  "blockingDependencies": [
+    "Staging sender/SMTP capable of real delivery to two distinct authorized test mailboxes",
+    "New Owner C and distinct Employee C complete invitation/password flows manually",
+    "Read access to Vercel handy-hub2 deployment/project/environment details",
+    "Functional Preview and final security audit after the remaining end-to-end flows"
+  ]
+}

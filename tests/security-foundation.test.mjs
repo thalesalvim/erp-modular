@@ -275,6 +275,20 @@ test('the staged foundation enforces tenant boundaries after the guarded cutover
       'clients cannot grant memberships directly',
     );
 
+    // Invitations/partial provisioning can leave an inactive membership. It
+    // must not authorize company data or be activatable by the browser.
+    await db.query('UPDATE public.tenant_memberships SET is_active = false WHERE user_id = $1', [users.employeeA]);
+    for (const table of ['tenants', 'tenant_data', 'companies']) {
+      const inactiveRead = await asRole(db, 'authenticated', users.employeeA, `SELECT id FROM public.${table}`);
+      assert.equal(inactiveRead.rows.length, 0, `inactive membership cannot read ${table}`);
+    }
+    await assert.rejects(() => asRole(db, 'authenticated', users.employeeA,
+      `UPDATE public.tenant_memberships SET is_active = true, role = 'owner' WHERE user_id = '${users.employeeA}'`),
+      /permission denied/i, 'inactive users cannot activate or promote their own membership');
+    await assert.rejects(() => asRole(db, 'authenticated', users.ownerA,
+      `INSERT INTO public.platform_admins (user_id) VALUES ('${users.ownerA}')`),
+      /permission denied/i, 'tenant owners cannot grant themselves platform administrator access');
+
     const adminTenants = await asRole(
       db,
       'authenticated',

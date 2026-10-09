@@ -4,6 +4,8 @@
 Alvo de toda escrita externa: `handyhub-staging`, `gbblkkgowccjycxtexvx`.
 Production/handyhub-db permaneceram intocados. Sem commit, push, merge ou deploy.
 
+**Atualização de 09/10/2026:** cobertura ampliada para **50 testes aprovados**, com handlers Auth/Master/convites e RLS local. Nenhum código da aplicação ou infraestrutura foi alterado nessa ampliação. O E2E real de Owner C/Employee C continua pendente. Consulte [a validação atual e o roteiro real](camada-1c-onboarding-validacao-local.md) e [as evidências locais sanitizadas](camada-1c-onboarding-local-evidence.json). Os resultados abaixo de 33 testes/SMTP/API são históricos da passagem de 08/10.
+
 ## Os nove itens solicitados
 
 | Item | Resultado e limite |

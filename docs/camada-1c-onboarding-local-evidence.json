@@ -1,0 +1,67 @@
+{
+  "dateLocal": "2026-10-09",
+  "timezone": "America/Sao_Paulo",
+  "branch": "codex/camada-1-auth",
+  "gitHead": "2bafb7d404cba2f0f87a7757d1df6f7bfa553ce4",
+  "status": "LOCAL_VALIDATION_COMPLETE_REAL_E2E_PENDING",
+  "tests": {
+    "baseline": { "passed": 33, "failed": 0 },
+    "expandedSuite": { "command": "npm test", "passed": 50, "failed": 0, "skipped": 0 },
+    "newRouteTestsAfterFinalHelperAdjustment": { "command": "node --test tests/onboarding-routes.test.mjs", "passed": 17, "failed": 0 },
+    "typescript": "PASS",
+    "directedLint": { "result": "PASS", "errors": 0, "warnings": 0 },
+    "databaseEngine": "PGlite in memory; no external SQL",
+    "authAndDatabaseRouteAdapters": "simulated; actual handlers and authorization/context modules executed",
+    "applicationBuildRepeated": false,
+    "applicationBuildLimit": "Previous passage passed; application source/dependencies/build config unchanged"
+  },
+  "newCoverage": [
+    "Master rejects missing/rejected Auth before elevated client initialization",
+    "Platform admin requires database authorization and ignores user_metadata",
+    "Invitation rejects CSRF, arbitrary UID, redirect and privileged fields",
+    "Invitation requires active membership for the caller and requested tenant",
+    "Owner/manager hierarchy and employee escalation denied",
+    "Missing invitation configuration stops before dispatch",
+    "Authorized invitation uses Auth-returned UID and verified tenant",
+    "Auth dispatch and membership failures do not report acceptance",
+    "Master handler fixes Owner role and activates membership after tenant finalization",
+    "Password context identity/session/flow and Auth rejection enforced",
+    "Password success clears context; sequential replay rejected after simulated Auth version change",
+    "Callback GET does not consume OTP",
+    "Rejected OTP does not issue context; valid invite/recovery contexts remain separate",
+    "Inactive membership has no company reads and cannot self-activate/promote",
+    "Tenant owner cannot insert platform_admin privilege"
+  ],
+  "localPreflight": {
+    "projectRef": "gbblkkgowccjycxtexvx",
+    "stagingUrlMatches": true,
+    "publicLegacyKeyMatchesStaging": true,
+    "serverLegacyKeyMatchesStaging": true,
+    "environmentIsLocal": true,
+    "siteOriginIsLocal": true,
+    "inviteModeIsTokenHash": false,
+    "fixtureProjectMatches": true,
+    "allExistingSyntheticRoleFixturesPresent": true,
+    "versionedTemplatesUseTokenHash": true,
+    "remoteCredentialValidityTested": false,
+    "remoteSmtpTemplatesCallbacksRevalidated": false,
+    "secretValuesRecorded": false
+  },
+  "externalBlockers": [
+    "Staging sender capable of delivery to two distinct authorized mailboxes",
+    "Explicit authorization for new Owner C/Employee C identities and invitations",
+    "Recipients manually complete their password and subsequent login flows",
+    "Read access to handy-hub2 Preview deployment and variables; previous 403 not retried"
+  ],
+  "limits": {
+    "realInvitationConsumptionRevalidated": false,
+    "realOwnerCEmployeeCEndToEndApproved": false,
+    "concurrentPasswordContextReplayTested": false,
+    "noApplicationSourceChanges": true,
+    "noExternalAuthOrDatabaseRequests": true,
+    "noRealAccountsOrEmails": true,
+    "noProductionChanges": true,
+    "noRlsPermissionOrMigrationChanges": true,
+    "noCommitPushMergeDeploy": true
+  }
+}
