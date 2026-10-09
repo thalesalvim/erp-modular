@@ -2,7 +2,7 @@
 export const EMAIL_CALLBACK_TYPES = ['invite', 'recovery', 'email', 'email_change'] as const;
 export type EmailCallbackType = (typeof EMAIL_CALLBACK_TYPES)[number];
 
-const allowedDestinations = new Set(['/', '/equipe', '/auth/account', '/auth/update-password']);
+const allowedDestinations = new Set(['/', '/equipe', '/auth/account', '/auth/activate', '/auth/update-password']);
 
 export type AuthCallback =
   | { kind: 'pkce'; code: string; destination: string }
@@ -30,7 +30,7 @@ export function parseAuthCallback(parameters: URLSearchParams): AuthCallback {
   return {
     kind: 'otp', tokenHash, type: type as EmailCallbackType,
     // Password setup cannot be skipped by an invitation/recovery URL parameter.
-    destination: type === 'invite' || type === 'recovery' ? '/auth/update-password' : next ?? '/',
+    destination: type === 'invite' ? '/auth/activate' : type === 'recovery' ? '/auth/update-password' : next ?? '/',
   };
 }
 

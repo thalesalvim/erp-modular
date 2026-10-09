@@ -1,0 +1,51 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "timestamp": "2026-10-09T00:43:43.132Z",
+  "emailDeliveryValidated": false,
+  "results": [
+    {
+      "name": "Public signup disabled: direct anon signup returns signup_disabled without creating an identity",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Administrative Auth invitation-link provisioning still creates a synthetic identity with public signup disabled; no SMTP receipt claim",
+      "outcome": "PASS"
+    },
+    {
+      "name": "GET confirmation preserves OTP; Referer excludes token path and same-origin POST remains required",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Invalid and foreign-origin callbacks cannot establish a session or consume the valid invitation",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Verified invitation establishes exact SSR user and signed HttpOnly context; recovery screen rejects invitation context",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Password API rejects absent/tampered/wrong-flow context, arbitrary user and mismatched confirmation",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic initial password saves through ordinary updateUser; cleared/old Auth context and consumed OTP cannot be reused",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic password login preserves only employee A; B SELECT/UPDATE remain denied by real RLS",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Synthetic recovery has separate screen/context; old password fails and new password logs in",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Master denies anon/employee; confirmed account is not attached/promoted and freshly created tenant is compensated",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Anon remains denied on company tables after local onboarding changes",
+      "outcome": "PASS"
+    }
+  ]
+}

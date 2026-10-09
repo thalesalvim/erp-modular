@@ -91,8 +91,9 @@ async function masterRequest(path: string, method = 'GET', body?: unknown) {
     method, credentials: 'same-origin', cache: 'no-store',
     ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
-  const result = await response.json() as { error?: string; tenants?: MasterTenantRow[]; tenant?: MasterTenantRow; deleted?: boolean };
-  if (!response.ok) throw new Error(result.error || 'Operação administrativa recusada.');
+  const result = await response.json() as { error?: string; tenants?: MasterTenantRow[]; tenant?: MasterTenantRow; deleted?: boolean;
+    owner?: { role: string; invitationDispatched: boolean }; onboarding?: { tenantId?: string; stage: string; cleanupFailed: boolean } };
+  if (!response.ok) throw new Error(`${result.error || 'Operação administrativa recusada.'}${result.onboarding?.tenantId ? ` Empresa pendente: ${result.onboarding.tenantId}. Etapa: ${result.onboarding.stage}.` : ''}`);
   return result;
 }
 
@@ -195,6 +196,7 @@ function MasterWorkspace() {
   const [newCompany, setNewCompany] = useState("");
   const [newOwner, setNewOwner] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [creatingTenant, setCreatingTenant] = useState(false);
   const [newPhone, setNewPhone] = useState("");
   const [newPlan, setNewPlan] = useState("Pro");
   const [newFee, setNewFee] = useState(149.90);
@@ -555,6 +557,7 @@ function MasterWorkspace() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingTenant) return;
     setModalError("");
 
     const checkEmail = newEmail.trim().toLowerCase();
@@ -562,7 +565,7 @@ function MasterWorkspace() {
       setModalError('Informe um e-mail de contato válido.');
       return;
     }
-    const slug = newCompany.toLowerCase().trim().replace(/[^a-z0-9]/g, '-');
+    const slug = newCompany.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const defaultModsForNew = PLAN_DEFAULT_MODULES[newPlan] || PLAN_DEFAULT_MODULES["Pro"];
 
     const newTenantData = {
@@ -582,14 +585,15 @@ function MasterWorkspace() {
     };
 
     let formatted: TenantAccount;
+    setCreatingTenant(true);
     try {
       const result = await masterRequest('/api/master/tenants', 'POST', newTenantData);
-      if (!result.tenant) throw new Error('Resposta administrativa inválida.');
+      if (!result.tenant || result.owner?.role !== 'owner' || !result.owner.invitationDispatched) throw new Error('Cadastro do primeiro owner não foi confirmado. Solicite revisão administrativa.');
       formatted = toTenantAccount(result.tenant);
     } catch (error) {
       setModalError(error instanceof Error ? error.message : 'Cadastro recusado.');
       return;
-    }
+    } finally { setCreatingTenant(false); }
 
     const updatedList = [...tenants, formatted];
     setTenants(updatedList);
@@ -603,7 +607,7 @@ function MasterWorkspace() {
     setNewPhone("");
 
     logAction(formatted.companyName, `Cadastrou empresa no plano ${newPlan}`);
-    setFeedbackMsg(`Empresa "${formatted.companyName}" cadastrada. O primeiro owner Auth deve ser provisionado pela Camada 1B.`);
+    setFeedbackMsg(`Empresa "${formatted.companyName}" cadastrada com seu primeiro owner. Convite enviado; o responsável definirá a própria senha.`);
     setTimeout(() => setFeedbackMsg(""), 3500);
   };
 
@@ -993,21 +997,21 @@ function MasterWorkspace() {
               <button onClick={() => setIsNewTenantModalOpen(false)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
 
-            {modalError && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold text-center">{modalError}</div>}
+            {modalError && <div role="alert" className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl font-bold text-center">{modalError}</div>}
 
             <form onSubmit={handleCreateTenant} className="space-y-3">
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">Nome da Empresa *</label>
-                <input required placeholder="Ex: Nome do Salão ou Loja" value={newCompany} onChange={e => setNewCompany(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                <label htmlFor="new-company-name" className="text-slate-300 font-semibold block mb-1">Nome da Empresa *</label>
+                <input id="new-company-name" required placeholder="Ex: Nome do Salão ou Loja" value={newCompany} onChange={e => setNewCompany(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Responsável *</label>
-                  <input required placeholder="Nome do Dono" value={newOwner} onChange={e => setNewOwner(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                  <label htmlFor="new-owner-name" className="text-slate-300 font-semibold block mb-1">Responsável — primeiro Owner *</label>
+                  <input id="new-owner-name" required placeholder="Nome do responsável" value={newOwner} onChange={e => setNewOwner(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-semibold block mb-1">E-mail Principal *</label>
-                  <input required type="email" placeholder="contato@empresa.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
+                  <label htmlFor="new-owner-email" className="text-slate-300 font-semibold block mb-1">E-mail para ativação do Owner *</label>
+                  <input id="new-owner-email" required type="email" placeholder="contato@empresa.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -1032,7 +1036,8 @@ function MasterWorkspace() {
                 <input required placeholder="(19) 99999-9999" disabled title="Indisponível nesta versão" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white outline-none" />
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer">Criar Empresa Segura</button>
+              <p className="text-xs text-slate-400">O responsável receberá um convite como Owner e definirá a própria senha. A ativação depende da abertura do e-mail.</p>
+              <button type="submit" disabled={creatingTenant} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl cursor-pointer disabled:opacity-50">{creatingTenant ? 'Criando empresa e convidando owner…' : 'Criar empresa e convidar Owner'}</button>
             </form>
           </div>
         </div>

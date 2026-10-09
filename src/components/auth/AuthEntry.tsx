@@ -36,7 +36,7 @@ export function AuthLoginForm() {
     setNotice('');
     try {
       if (recovery) {
-        const redirectTo = new URL('/auth/callback?next=%2Fauth%2Fupdate-password', window.location.origin).toString();
+        const redirectTo = new URL('/auth/callback', window.location.origin).toString();
         await sendPasswordRecovery(supabase, email, redirectTo);
         setNotice('Se a conta existir, você receberá um link para redefinir a senha.');
       } else {

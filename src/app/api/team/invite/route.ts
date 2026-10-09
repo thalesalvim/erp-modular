@@ -77,8 +77,15 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: invitation, error: invitationError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
     if (invitationError || !invitation.user) {
+      // Operational diagnosis without recipient, token, credential or SDK message.
+      console.error('Auth invitation dispatch failed', {
+        code: invitationError ? invitationError.code ?? 'unknown_auth_error' : 'missing_user',
+        status: invitationError?.status ?? null,
+        name: invitationError?.name ?? null,
+      });
       // Confirmed/existing accounts are not silently attached to another tenant or promoted.
-      return reply({ error: 'Não foi possível enviar o convite. Verifique se o e-mail já possui conta.' }, 409);
+      const status = invitationError?.status === 429 ? 429 : (invitationError?.status ?? 500) >= 500 ? 502 : 409;
+      return reply({ error: 'Não foi possível enviar o convite. Tente novamente mais tarde ou solicite revisão administrativa.' }, status);
     }
 
     const { error: insertError } = await admin.from('tenant_memberships').insert({

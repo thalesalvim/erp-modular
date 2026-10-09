@@ -1,0 +1,253 @@
+{
+  "ref": "gbblkkgowccjycxtexvx",
+  "base": "http://localhost:3000",
+  "checks": [
+    {
+      "name": "Employee cannot dispatch an administrative invitation",
+      "checkedAt": "2026-10-08T23:36:21.467Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A cannot invite into company B",
+      "checkedAt": "2026-10-08T23:36:22.644Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A real invitation SMTP request",
+      "checkedAt": "2026-10-08T23:36:23.812Z",
+      "status": 409,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Employee cannot dispatch an administrative invitation",
+      "checkedAt": "2026-10-08T23:38:04.559Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A cannot invite into company B",
+      "checkedAt": "2026-10-08T23:38:05.851Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A real invitation SMTP request",
+      "checkedAt": "2026-10-08T23:38:07.073Z",
+      "status": 502,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Employee cannot dispatch an administrative invitation",
+      "checkedAt": "2026-10-08T23:39:05.121Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A cannot invite into company B",
+      "checkedAt": "2026-10-08T23:39:06.095Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A real invitation SMTP request",
+      "checkedAt": "2026-10-08T23:39:07.258Z",
+      "status": 502,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Employee cannot dispatch an administrative invitation",
+      "checkedAt": "2026-10-08T23:44:41.295Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A cannot invite into company B",
+      "checkedAt": "2026-10-08T23:44:42.545Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A real invitation SMTP request",
+      "checkedAt": "2026-10-08T23:44:43.663Z",
+      "status": 502,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Master without session",
+      "checkedAt": "2026-10-08T23:53:05.566Z",
+      "status": 401,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Invite without session",
+      "checkedAt": "2026-10-08T23:53:05.578Z",
+      "status": 401,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Legacy team login retired",
+      "checkedAt": "2026-10-08T23:53:05.583Z",
+      "status": 410,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Callback arbitrary redirect rejected",
+      "checkedAt": "2026-10-08T23:53:05.589Z",
+      "status": 303,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Callback unsupported OTP type rejected",
+      "checkedAt": "2026-10-08T23:53:05.592Z",
+      "status": 303,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "OTP GET does not consume token",
+      "checkedAt": "2026-10-08T23:53:05.595Z",
+      "status": 200,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Foreign-origin callback POST rejected",
+      "checkedAt": "2026-10-08T23:53:05.599Z",
+      "status": 303,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Invalid OTP rejected by Auth",
+      "checkedAt": "2026-10-08T23:53:06.392Z",
+      "status": 303,
+      "outcome": "PASS",
+      "target": "local build / staging"
+    },
+    {
+      "name": "Employee cannot dispatch an administrative invitation",
+      "checkedAt": "2026-10-08T23:54:49.334Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A cannot invite into company B",
+      "checkedAt": "2026-10-08T23:54:50.189Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Owner A real invitation SMTP request",
+      "checkedAt": "2026-10-08T23:54:51.864Z",
+      "status": 201,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Invited UUID has exactly employee membership A",
+      "checkedAt": "2026-10-08T23:54:52.249Z",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Real invited identity state",
+      "checkedAt": "2026-10-08T23:57:06.953Z",
+      "confirmed": false,
+      "lastSignInAt": null,
+      "invitationSentAt": "2026-10-09T00:06:23.011858Z",
+      "recoverySentAt": null,
+      "membership": {
+        "company": "A",
+        "role": "employee",
+        "active": true
+      }
+    },
+    {
+      "name": "SMTP failure diagnosed in Resend",
+      "checkedAt": "2026-10-08T23:57:08.339Z",
+      "status": 403,
+      "cause": "testing_domain_restriction",
+      "transport": "SMTP v1.0.0",
+      "action": "User authorized provider account mailbox; no credential change",
+      "source": "Resend provider log"
+    },
+    {
+      "name": "Provider confirms real invitation delivery",
+      "checkedAt": "2026-10-08T23:57:08.340Z",
+      "status": "delivered",
+      "source": "Resend sending list",
+      "mailboxReceiptConfirmed": false
+    },
+    {
+      "name": "Real invited identity state",
+      "checkedAt": "2026-10-09T00:27:02.973Z",
+      "confirmed": false,
+      "lastSignInAt": null,
+      "invitationSentAt": "2026-10-09T00:06:23.011858Z",
+      "recoverySentAt": null,
+      "membership": {
+        "company": "A",
+        "role": "employee",
+        "active": true
+      }
+    },
+    {
+      "name": "Real invited identity state",
+      "checkedAt": "2026-10-09T00:47:44.083Z",
+      "confirmed": true,
+      "lastSignInAt": "2026-10-09T00:47:17.111102Z",
+      "invitationSentAt": "2026-10-09T00:06:23.011858Z",
+      "recoverySentAt": null,
+      "membership": {
+        "company": "A",
+        "role": "employee",
+        "active": true
+      }
+    },
+    {
+      "name": "Real recovery SMTP request",
+      "checkedAt": "2026-10-09T00:47:44.999Z",
+      "accepted": true,
+      "deliveryConfirmed": false
+    },
+    {
+      "name": "Real invitation opens explicit activation after same-origin/referrer correction",
+      "checkedAt": "2026-10-09T00:54:37.174Z",
+      "outcome": "PASS",
+      "scope": "employee A real test account",
+      "fullOwnerCEmployeeCE2EApproved": false
+    },
+    {
+      "name": "Real account Auth state",
+      "checkedAt": "2026-10-09T00:54:37.175Z",
+      "confirmed": true,
+      "passwordDefined": true,
+      "membership": {
+        "company": "A",
+        "role": "employee",
+        "active": true
+      },
+      "passwordRead": false
+    },
+    {
+      "name": "Real recovery email provider delivery",
+      "checkedAt": "2026-10-09T00:54:37.175Z",
+      "providerStatus": "delivered",
+      "providerMessageId": "01a11e2b-eb4d-7a0f-8157-f6a31b010645",
+      "callbackPath": "/auth/callback",
+      "type": "recovery",
+      "tokenRecorded": false
+    },
+    {
+      "name": "Real recovery acceptance and password save observed in application logs and Auth metadata",
+      "checkedAt": "2026-10-09T00:54:37.175Z",
+      "callbackStatus": 303,
+      "passwordSaveStatus": 200,
+      "recoveryTokenConsumed": true,
+      "replayedLinkError": "otp_expired",
+      "completeManualLogoutPasswordLoginCertified": false
+    },
+    {
+      "name": "Real test account application interface",
+      "checkedAt": "2026-10-09T00:54:37.175Z",
+      "company": "Synthetic Company A",
+      "roleLabel": "Colaborador",
+      "outcome": "PASS",
+      "scope": "Does not certify Owner C or Employee C"
+    }
+  ]
+}

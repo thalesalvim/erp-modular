@@ -75,7 +75,7 @@ export function validateTenantMutation(value: unknown, creating = false): Record
     switch (key) {
       case 'slug': valid = typeof field === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field) && field.length <= 100; break;
       case 'company_name': valid = shortText(field) && Boolean((field as string).trim()); break;
-      case 'owner_email': valid = typeof field === 'string' && field.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(field); break;
+      case 'owner_email': valid = typeof field === 'string' && field.length <= 254 && /^[^\s@<>"\x00-\x1f]+@[^\s@<>"\x00-\x1f]+\.[^\s@<>"\x00-\x1f]+$/.test(field); break;
       case 'monthly_fee': valid = typeof field === 'number' && Number.isFinite(field) && field >= 0 && field <= 1e7; break;
       case 'due_day': valid = typeof field === 'number' && Number.isInteger(field) && field >= 1 && field <= 31; break;
       case 'status': valid = typeof field === 'string' && statuses.includes(field); break;
@@ -87,6 +87,7 @@ export function validateTenantMutation(value: unknown, creating = false): Record
     }
     if (!valid) throw new Error('Valor inválido para o cadastro da empresa.');
   }
-  if (creating && (!value.slug || !value.company_name)) throw new Error('Nome e slug são obrigatórios.');
-  return value;
+  if (creating && (!value.slug || !value.company_name || typeof value.owner_name !== 'string' ||
+      !value.owner_name.trim() || !value.owner_email)) throw new Error('Empresa, slug, nome e e-mail do responsável são obrigatórios.');
+  return { ...value, ...(typeof value.owner_email === 'string' ? { owner_email: value.owner_email.trim().toLowerCase() } : {}) };
 }

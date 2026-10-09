@@ -28,7 +28,7 @@ test('invitation and recovery tokens force password setup without a PKCE code', 
     const result = parse(`token_hash=${hash}&type=${type}&next=/equipe`);
     assert.equal(result.kind, 'otp');
     assert.equal(result.type, type);
-    assert.equal(result.destination, '/auth/update-password');
+    assert.equal(result.destination, type === 'invite' ? '/auth/activate' : '/auth/update-password');
   }
 });
 

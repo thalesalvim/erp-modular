@@ -25,7 +25,13 @@ test('Master validates subscription and invoice content', () => {
 });
 
 test('Master creation allows supported fields and rejects missing or invalid identity', () => {
-  assert.deepEqual(validateTenantMutation({ slug: 'synthetic-a', company_name: 'Synthetic A' }, true), { slug: 'synthetic-a', company_name: 'Synthetic A' });
+  const input = { slug: 'synthetic-a', company_name: 'Synthetic A', owner_name: 'Synthetic Owner', owner_email: 'owner@example.invalid' };
+  assert.deepEqual(validateTenantMutation(input, true), input);
+  for (const key of ['owner_name', 'owner_email']) {
+    const missing = { ...input }; delete missing[key];
+    assert.throws(() => validateTenantMutation(missing, true));
+  }
+  for (const email of ['<owner>@example.invalid', 'owner\n@example.invalid']) assert.throws(() => validateTenantMutation({ ...input, owner_email: email }, true));
   for (const input of [{ company_name: 'A' }, { slug: '../a', company_name: 'A' }, { slug: 'a', company_name: '' }, { slug: 'a', company_name: 'A', owner_email: 'bad' }]) {
     assert.throws(() => validateTenantMutation(input, true));
   }

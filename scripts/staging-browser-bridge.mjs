@@ -5,6 +5,9 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 const fixtures = JSON.parse(readFileSync('.env.staging-fixtures.json', 'utf8'));
 if (fixtures.ref !== 'gbblkkgowccjycxtexvx') throw new Error('Wrong staging');
+const phase = process.argv[2] || '1b';
+if (!['1b', '1c'].includes(phase)) throw new Error('Invalid evidence phase');
+const evidenceNames = phase === '1c' ? ['callbacks', 'invite-template', 'recovery-template', 'preview', 'email-flow', 'activation', 'signup-disabled', 'recovery-flow', 'master-owner'] : ['preview-variables', 'master-staging', 'equipe-staging'];
 const token = randomBytes(24).toString('hex');
 const origin = 'http://127.0.0.1:43188';
 const escape = (s) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -17,7 +20,7 @@ const server = createServer(async (request, response) => {
   if (request.method === 'GET') {
     const actor = parsed.searchParams.get('actor');
     const user = fixtures.users[actor];
-    response.end(`<h1>HandyHub — fixtures de staging</h1><p>Somente dados sintéticos; projeto ${fixtures.ref}.</p><form method="get"><label>Perfil sintético<select name="actor">${Object.keys(fixtures.users).map((name) => `<option${name === actor ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button>Obter credenciais sintéticas</button></form>${user ? `<label>E-mail sintético<textarea readonly>${escape(user.email)}</textarea></label><label>Senha sintética<textarea readonly>${escape(user.password)}</textarea></label>` : ''}<form method="post"><label>Nome da evidência<select name="name"><option>preview-variables</option><option>master-staging</option><option>equipe-staging</option></select></label><label>Imagem de evidência<textarea name="image"></textarea></label><button>Salvar evidência local</button></form>`);
+    response.end(`<h1>HandyHub — fixtures de staging</h1><p>Somente dados sintéticos; projeto ${fixtures.ref}.</p><form method="get"><label>Perfil sintético<select name="actor">${Object.keys(fixtures.users).map((name) => `<option${name === actor ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button>Obter credenciais sintéticas</button></form>${user ? `<label>E-mail sintético<textarea readonly>${escape(user.email)}</textarea></label><label>Senha sintética<textarea readonly>${escape(user.password)}</textarea></label>` : ''}<form method="post"><label>Nome da evidência<select name="name">${evidenceNames.map((name) => `<option>${name}</option>`).join('')}</select></label><label>Imagem de evidência<textarea name="image"></textarea></label><button>Salvar evidência local</button></form>`);
     return;
   }
   if (request.method !== 'POST' || request.headers.origin !== origin || !request.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) { response.writeHead(403).end(); return; }
@@ -26,11 +29,11 @@ const server = createServer(async (request, response) => {
     for await (const chunk of request) { body += chunk; if (body.length > 10e6) throw new Error('Too large'); }
     const form = new URLSearchParams(body);
     const name = form.get('name');
-    if (!['preview-variables', 'master-staging', 'equipe-staging'].includes(name)) throw new Error('Invalid filename');
+    if (!evidenceNames.includes(name)) throw new Error('Invalid filename');
     const bytes = Buffer.from(form.get('image') || '', 'base64');
     if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.length > 6e6) throw new Error('Invalid JPEG');
     mkdirSync('docs/evidence', { recursive: true });
-    writeFileSync(`docs/evidence/camada-1b-${name}.jpg`, bytes);
+    writeFileSync(`docs/evidence/camada-${phase}-${name}.jpg`, bytes);
     response.end(`<h1>Evidência salva: ${name}</h1>`);
     console.log(`Evidence saved: ${name}`);
   } catch { response.writeHead(400).end('Invalid evidence'); }
