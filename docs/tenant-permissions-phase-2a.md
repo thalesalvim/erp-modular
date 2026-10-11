@@ -1,5 +1,11 @@
 # Fase 2A — esquema empresarial e RLS local
 
+> Atualização M1/M2 sobre o commit `69c032d`: a [correção de concorrência](product-concurrency-phase-2a.md)
+> acrescenta uma quarta migration, revoga escrita direta nas 26 tabelas novas e permite
+> atualização de produto/custo/estoque somente por comando atômico com versão esperada.
+> Essa atualização substitui as descrições de CRUD direto e concorrência pendente abaixo.
+> As demais seções e os 89 testes/build registrados abaixo são evidências da entrega original.
+
 ## Estado e alcance
 
 Base: `91fd517d8fd5d67a0cc3abd6839147e041af89ef`, Fase 1.
