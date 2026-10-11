@@ -45,7 +45,10 @@ class ProductConcurrency(unittest.TestCase):
                         '--tmpfs', '/var/lib/postgresql/data', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
                         IMAGE], check=True, stdout=subprocess.DEVNULL)
         for _ in range(100):
-            if subprocess.run(['docker', 'exec', CONTAINER, 'pg_isready', '-U', 'postgres'],
+            # initdb starts a temporary server, then stops it before PID 1 execs
+            # the final postgres process. Do not treat that temporary socket as ready.
+            if subprocess.run(['docker', 'exec', CONTAINER, 'sh', '-c',
+                               'test "$(cat /proc/1/comm)" = postgres && pg_isready -U postgres'],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
                 break
             time.sleep(.1)

@@ -210,9 +210,13 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
         ALTER TABLE public.tenant_memberships OWNER TO erp_metadata_owner;`);
       const privateTables = (await db.query("SELECT tablename FROM pg_tables WHERE schemaname='private' AND tablename LIKE 'erp_%'")).rows;
       for (const { tablename } of privateTables) await db.exec(`ALTER TABLE private.${tablename} OWNER TO erp_metadata_owner`);
-      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname <> 'erp_update_product'")).rows;
+      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname NOT IN ('erp_update_product','erp_read_own_appointments')")).rows;
       for (const { signature } of functions) await db.exec(`ALTER FUNCTION ${signature} OWNER TO erp_metadata_owner`);
       assert.equal((await actor(db, users.employee, 'SELECT * FROM public.erp_appointments')).rows.length, 1);
+      const agenda = (await actor(db, users.employee, 'SELECT * FROM public.erp_read_own_appointments($1)', [tenant.C])).rows;
+      assert.equal(agenda.length, 1);
+      assert.equal(agenda[0].clientName, 'Synthetic client 1');
+      assert.equal(agenda[0].serviceName, 'Synthetic service');
       assert.equal((await actor(db, users.employee, 'SELECT * FROM public.erp_expenses')).rows.length, 0);
       await grant(db, 'manager', []);
       assert.equal((await actor(db, users.manager, 'SELECT * FROM public.erp_expenses')).rows.length, 0);

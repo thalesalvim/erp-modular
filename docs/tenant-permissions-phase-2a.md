@@ -1,5 +1,9 @@
 # Fase 2A — esquema empresarial e RLS local
 
+> Correção M3 local: a [leitura operacional própria da agenda](own-appointments-read-phase-2a.md)
+> acrescenta projeção com os nomes mínimos de cliente/serviço e RLS para um papel NOLOGIN,
+> sem ampliar o acesso direto aos cadastros. M4 e integração das telas seguem pendentes.
+
 > Atualização M1/M2 sobre o commit `69c032d`: a [correção de concorrência](product-concurrency-phase-2a.md)
 > acrescenta uma quarta migration, revoga escrita direta nas 26 tabelas novas e permite
 > atualização de produto/custo/estoque somente por comando atômico com versão esperada.
