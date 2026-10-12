@@ -24,9 +24,15 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
     const employeeGrants = catalog.filter(c => c.delegable_to.includes('employee')).map(c => c.permission);
     const managerGrants = catalog.filter(c => c.delegable_to.includes('manager')).map(c => c.permission);
 
-    await t.test('legacy payload, grants and policies remain unchanged; no backfill occurred', async () => {
+    await t.test('legacy payload/grants preserved; only restrictive membership ceiling added; no backfill', async () => {
       assert.deepEqual((await db.query(legacyAclSql)).rows, legacyAcl);
-      assert.deepEqual((await db.query("SELECT * FROM pg_policies WHERE tablename='tenant_data' ORDER BY policyname")).rows, legacyBefore.rows);
+      const policies = (await db.query("SELECT * FROM pg_policies WHERE tablename='tenant_data' ORDER BY policyname")).rows;
+      assert.deepEqual(policies.filter(p => p.policyname !== 'tenant_data_membership_ceiling'), legacyBefore.rows);
+      const ceiling = policies.filter(p => p.policyname === 'tenant_data_membership_ceiling');
+      assert.equal(ceiling.length, 1);
+      assert.equal(ceiling[0].permissive, 'RESTRICTIVE');
+      assert.equal(ceiling[0].cmd, 'ALL');
+      assert.deepEqual(ceiling[0].roles, ['authenticated']);
       assert.deepEqual((await db.query('SELECT tenant_id,payload FROM public.tenant_data ORDER BY tenant_id')).rows, dataBefore.rows);
       assert.equal((await db.query('SELECT count(*)::int n FROM private.erp_policy_state')).rows[0].n, 0);
       assert.equal((await db.query("SELECT has_any_column_privilege('authenticated','public.tenant_memberships','UPDATE') allowed")).rows[0].allowed,false);

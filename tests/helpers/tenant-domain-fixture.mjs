@@ -18,6 +18,8 @@ const additions = [
   '20261011030100_erp_historical_posting.sql',
   '20261012010000_erp_lifecycle_state.sql',
   '20261012010100_erp_lifecycle_commands.sql',
+  '20261012020000_erp_membership_revocation.sql',
+  '20261012020100_erp_membership_restoration.sql',
 ];
 const uid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const tenant = { A: uid(101), B: uid(102), C: uid(103) };
