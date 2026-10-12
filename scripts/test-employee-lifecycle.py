@@ -211,7 +211,7 @@ out.push('ROLLBACK;');process.stdout.write(out.join('\\n'));
         self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
         self.good('ALTER TABLE public.erp_sales DISABLE TRIGGER erp_validate_history')
         result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
-        self.assertNotEqual(result.returncode,0); self.assertIn('RECOVERY_SCHEMA_INTEGRITY_FAILURE',result.stderr)
+        self.assertNotEqual(result.returncode,0); self.assertIn('RECOVERY_SCHEMA_DRIFT',result.stderr)
         self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'t')
         self.good('ALTER TABLE public.erp_sales ENABLE TRIGGER erp_validate_history; GRANT SELECT(payload) ON public.tenant_data TO authenticated')
         result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
