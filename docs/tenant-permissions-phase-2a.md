@@ -1,5 +1,9 @@
 # Fase 2A — esquema empresarial e RLS local
 
+> Lifecycle e recuperação locais: [desativação, retenção e reversão](employee-lifecycle-recovery-phase-2a.md)
+> acrescentam estado empresarial privado, reativação Owner com controle de revisão,
+> revogação e runbooks sem exclusões/fallback JSON. Nenhuma aplicação remota ou API integrada.
+
 > Correção M4 local: [snapshots históricos](historical-snapshots-phase-2a.md), CMV separado
 > e postagem Owner imutável acrescentam duas migrations e a 27ª tabela empresarial.
 > Registros anteriores continuam incompletos; nenhum dado foi presumido ou migrado.

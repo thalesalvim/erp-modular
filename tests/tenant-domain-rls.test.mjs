@@ -9,7 +9,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
   try {
     const legacyAclSql = `SELECT c.relname,c.relacl,c.relrowsecurity,c.relforcerowsecurity,a.attname,a.attacl
       FROM pg_class c JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0
-      WHERE c.oid IN ('public.tenants'::regclass,'public.tenant_data'::regclass,'public.tenant_memberships'::regclass,'public.platform_admins'::regclass)
+      WHERE c.oid IN ('public.tenants'::regclass,'public.tenant_data'::regclass,'public.platform_admins'::regclass)
       ORDER BY c.relname,a.attnum`;
     const legacyAcl = (await db.query(legacyAclSql)).rows;
     const legacyBefore = await db.query("SELECT * FROM pg_policies WHERE tablename='tenant_data' ORDER BY policyname");
@@ -29,6 +29,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
       assert.deepEqual((await db.query("SELECT * FROM pg_policies WHERE tablename='tenant_data' ORDER BY policyname")).rows, legacyBefore.rows);
       assert.deepEqual((await db.query('SELECT tenant_id,payload FROM public.tenant_data ORDER BY tenant_id')).rows, dataBefore.rows);
       assert.equal((await db.query('SELECT count(*)::int n FROM private.erp_policy_state')).rows[0].n, 0);
+      assert.equal((await db.query("SELECT has_any_column_privilege('authenticated','public.tenant_memberships','UPDATE') allowed")).rows[0].allowed,false);
     });
     await t.test('SQL catalog exactly matches all Phase 1 permissions, scopes, fields and ceilings', async () => {
       const require = createRequire(import.meta.url); const ts = require('typescript'); const loaded = { exports: {} };
@@ -210,7 +211,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
         ALTER TABLE public.tenant_memberships OWNER TO erp_metadata_owner;`);
       const privateTables = (await db.query("SELECT tablename FROM pg_tables WHERE schemaname='private' AND tablename LIKE 'erp_%'")).rows;
       for (const { tablename } of privateTables) await db.exec(`ALTER TABLE private.${tablename} OWNER TO erp_metadata_owner`);
-      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname NOT IN ('erp_update_product','erp_read_own_appointments','erp_post_sale','erp_post_attendance','erp_validate_history')")).rows;
+      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname NOT IN ('erp_update_product','erp_read_own_appointments','erp_post_sale','erp_post_attendance','erp_validate_history','erp_set_employee_active','erp_guard_new_staff_operation')")).rows;
       for (const { signature } of functions) await db.exec(`ALTER FUNCTION ${signature} OWNER TO erp_metadata_owner`);
       assert.equal((await actor(db, users.employee, 'SELECT * FROM public.erp_appointments')).rows.length, 1);
       const agenda = (await actor(db, users.employee, 'SELECT * FROM public.erp_read_own_appointments($1)', [tenant.C])).rows;

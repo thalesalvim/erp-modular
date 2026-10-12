@@ -16,6 +16,8 @@ const additions = [
   '20261011020000_erp_own_appointments_read.sql',
   '20261011030000_erp_historical_snapshots.sql',
   '20261011030100_erp_historical_posting.sql',
+  '20261012010000_erp_lifecycle_state.sql',
+  '20261012010100_erp_lifecycle_commands.sql',
 ];
 const uid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const tenant = { A: uid(101), B: uid(102), C: uid(103) };
@@ -64,6 +66,9 @@ async function insert(db, table, t, id, data) {
 }
 async function seed(db) {
   for (const t of Object.values(tenant)) {
+    // New-operation guards use the real Owner scope even during synthetic seeding.
+    const owner = t === tenant.A ? users.ownerA : t === tenant.B ? users.ownerB : users.owner;
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[owner]);
     const id = n => ids(t, n);
     for (const n of [1, 2, 3]) {
       await insert(db, 'employees', t, id(n), { name: 'Same display name' });
@@ -102,6 +107,7 @@ async function seed(db) {
     await db.query('INSERT INTO private.erp_employee_auth_links VALUES ($1,$2,$3)', [tenant.C, ids(tenant.C, n), user]);
     await db.query('INSERT INTO private.erp_customer_assignments VALUES ($1,$2,$3)', [tenant.C, ids(tenant.C, 10 + n), ids(tenant.C, n)]);
   }
+  await db.query("SELECT set_config('request.jwt.claim.sub','',false)");
 }
 async function grant(db, role, permissions, as = users.owner, target = tenant.C, expected) {
   const state = await db.query('SELECT revision FROM private.erp_policy_state WHERE tenant_id=$1', [target]);
