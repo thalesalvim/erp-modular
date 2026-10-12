@@ -14,6 +14,8 @@ const additions = [
   '20261010060200_erp_domain_rls.sql',
   '20261011010000_erp_product_concurrency.sql',
   '20261011020000_erp_own_appointments_read.sql',
+  '20261011030000_erp_historical_snapshots.sql',
+  '20261011030100_erp_historical_posting.sql',
 ];
 const uid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const tenant = { A: uid(101), B: uid(102), C: uid(103) };

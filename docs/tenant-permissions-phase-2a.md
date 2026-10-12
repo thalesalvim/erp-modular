@@ -1,8 +1,12 @@
 # Fase 2A — esquema empresarial e RLS local
 
+> Correção M4 local: [snapshots históricos](historical-snapshots-phase-2a.md), CMV separado
+> e postagem Owner imutável acrescentam duas migrations e a 27ª tabela empresarial.
+> Registros anteriores continuam incompletos; nenhum dado foi presumido ou migrado.
+
 > Correção M3 local: a [leitura operacional própria da agenda](own-appointments-read-phase-2a.md)
 > acrescenta projeção com os nomes mínimos de cliente/serviço e RLS para um papel NOLOGIN,
-> sem ampliar o acesso direto aos cadastros. M4 e integração das telas seguem pendentes.
+> sem ampliar o acesso direto aos cadastros. Integração das telas segue pendente.
 
 > Atualização M1/M2 sobre o commit `69c032d`: a [correção de concorrência](product-concurrency-phase-2a.md)
 > acrescenta uma quarta migration, revoga escrita direta nas 26 tabelas novas e permite

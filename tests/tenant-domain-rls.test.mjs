@@ -41,7 +41,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
     });
     await t.test('every new public table has forced RLS; no anon or service_role operational grants', async () => {
       const flags = await db.query("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid IN (SELECT (schemaname||'.'||tablename)::regclass FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'erp_%')");
-      assert.equal(flags.rows.length, 26);
+      assert.equal(flags.rows.length, 27);
       assert.ok(flags.rows.every(r => r.relrowsecurity && r.relforcerowsecurity));
       for (const table of tables) for (const role of ['anon', 'service_role']) {
         const p = await db.query("SELECT has_table_privilege($1,$2,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS allowed", [role, `public.${table}`]);
@@ -63,7 +63,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
         const allowed = user === users.owner ? tenant.C : user === users.ownerA ? tenant.A : tenant.B;
         for (const table of tables) {
           const rows = (await actor(db, user, `SELECT * FROM public.${table}`)).rows;
-          if (['erp_employee_schedules','erp_employee_roles','erp_promotion_targets'].includes(table)) assert.equal(rows.length, 0, table);
+          if (['erp_employee_schedules','erp_employee_roles','erp_promotion_targets','erp_sale_cmv'].includes(table)) assert.equal(rows.length, 0, table);
           else assert.ok(rows.length > 0, table);
           assert.ok(rows.every(r => r.tenant_id === allowed), table);
         }
@@ -210,7 +210,7 @@ test('Phase 2A: actual SQL authorization in isolated PGlite, synthetic identitie
         ALTER TABLE public.tenant_memberships OWNER TO erp_metadata_owner;`);
       const privateTables = (await db.query("SELECT tablename FROM pg_tables WHERE schemaname='private' AND tablename LIKE 'erp_%'")).rows;
       for (const { tablename } of privateTables) await db.exec(`ALTER TABLE private.${tablename} OWNER TO erp_metadata_owner`);
-      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname NOT IN ('erp_update_product','erp_read_own_appointments')")).rows;
+      const functions = (await db.query("SELECT p.oid::regprocedure::text signature FROM pg_proc p WHERE p.proname LIKE 'erp_%' AND p.prosecdef AND p.proname NOT IN ('erp_update_product','erp_read_own_appointments','erp_post_sale','erp_post_attendance','erp_validate_history')")).rows;
       for (const { signature } of functions) await db.exec(`ALTER FUNCTION ${signature} OWNER TO erp_metadata_owner`);
       assert.equal((await actor(db, users.employee, 'SELECT * FROM public.erp_appointments')).rows.length, 1);
       const agenda = (await actor(db, users.employee, 'SELECT * FROM public.erp_read_own_appointments($1)', [tenant.C])).rows;
