@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Recovery seals hash SQL definitions; keep checkout bytes stable on Windows.
+*.sql text eol=lf
