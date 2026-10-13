@@ -30,7 +30,7 @@ class BeforeSeal(unittest.TestCase):
   def run(args,*a,**kw):
    if isinstance(args,list) and args[:3]==['node','--input-type=module','-e']:
     args=args.copy()
-    args[3]=args[3].replace('for(const f of additions)',"for(const f of additions.filter(n=>!n.startsWith('202610120301')))")
+    args[3]=args[3].replace('for(const f of additions)',"for(const f of additions.filter(n=>!n.startsWith('202610120301')&&!n.startsWith('202610120302')))")
    return original(args,*a,**kw)
   with patch.object(subprocess,'run',side_effect=run):
    f.ProductConcurrency.setUpClass.__func__(cls)
