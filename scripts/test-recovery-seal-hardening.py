@@ -15,7 +15,7 @@ T,OWNER,EMPLOYEE=c.T,c.OWNER,c.EMPLOYEE
 ROOT=f.ROOT
 B=ROOT/'supabase/migrations/20261012030100_erp_recovery_integrity.sql'
 REC=c.RECOVERY
-RESUME=(REC/'phase-2a-resume-normalized.sql').read_text()
+RESUME=(REC/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8')
 
 def body(sql):
  return sql.replace('BEGIN;','').replace('COMMIT;','')
@@ -35,7 +35,7 @@ class BeforeSeal(unittest.TestCase):
   with patch.object(subprocess,'run',side_effect=run):
    f.ProductConcurrency.setUpClass.__func__(cls)
  def rejected_install(self,ddl,marker):
-  result=self.sql('BEGIN;'+ddl+';'+body(B.read_text())+';COMMIT;')
+  result=self.sql('BEGIN;'+ddl+';'+body(B.read_bytes().decode('utf-8'))+';COMMIT;')
   self.assertNotEqual(result.returncode,0);self.assertIn(marker,result.stderr)
   self.assertEqual(self.good("SELECT to_regclass('private.erp_recovery_schema_seal') IS NULL"),'t')
  def test_all_27_business_tables_require_rls_and_force_before_install(self):
@@ -62,8 +62,8 @@ class BeforeSeal(unittest.TestCase):
   self.rejected_install("ALTER ROLE authenticated SET session_replication_role='replica'",'RECOVERY_UNSAFE_REPLICATION_DEFAULT')
   self.rejected_install('GRANT SET ON PARAMETER session_replication_role TO authenticated','RECOVERY_UNSAFE_PARAMETER_PRIVILEGE')
  def test_intact_install_and_resume(self):
-  self.good(B.read_text())
-  self.good((REC/'phase-2a-enter-maintenance.sql').read_text()); self.good(RESUME)
+  self.good(B.read_bytes().decode('utf-8'))
+  self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8')); self.good(RESUME)
   self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'f')
   self.assertEqual(self.good('SELECT count(*) FROM public.erp_sale_finance',f.uuid(6)),'0')
 
@@ -74,7 +74,7 @@ class AfterSeal(unittest.TestCase):
  wait_for=f.ProductConcurrency.wait_for
  @classmethod
  def setUpClass(cls): f.ProductConcurrency.setUpClass.__func__(cls)
- def setUp(self): self.good((REC/'phase-2a-enter-maintenance.sql').read_text())
+ def setUp(self): self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
  def tearDown(self): self.good(RESUME)
  def rejected_resume(self,ddl,marker):
   result=self.sql('BEGIN;'+ddl+';'+body(RESUME)+';COMMIT;')
@@ -111,7 +111,7 @@ class AfterSeal(unittest.TestCase):
  def test_new_login_connection_inherits_role_database_default(self):
   self.good("CREATE ROLE seal_pool_probe LOGIN NOINHERIT; ALTER ROLE seal_pool_probe IN DATABASE postgres SET session_replication_role='replica'")
   try:
-   result=subprocess.run(['docker','exec',f.CONTAINER,'psql','-XAtq','-U','seal_pool_probe','-d','postgres','-c','SHOW session_replication_role'],capture_output=True,text=True,timeout=10)
+   result=self.sql('SHOW session_replication_role',database_user='seal_pool_probe')
    self.assertEqual(result.returncode,0,result.stderr); self.assertEqual(result.stdout.strip(),'replica')
    result=self.sql(RESUME)
    self.assertNotEqual(result.returncode,0);self.assertIn('RECOVERY_UNSAFE_REPLICATION_DEFAULT',result.stderr)
@@ -159,7 +159,7 @@ class AfterSeal(unittest.TestCase):
    self.denied(f.rpc(product,version,{'price':200}),OWNER,'40001')
   finally:
    self.good('ALTER DATABASE postgres RESET session_replication_role')
-   self.good((REC/'phase-2a-enter-maintenance.sql').read_text())
+   self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
  def test_prepared_command_cannot_cache_safe_mode(self):
   self.good(RESUME)
   product=r.lifecycle.history.PRODUCT
@@ -169,7 +169,7 @@ class AfterSeal(unittest.TestCase):
    result=self.sql(f"PREPARE cached AS {command}; SET SESSION AUTHORIZATION authenticated; SET request.jwt.claim.sub='{OWNER}'; EXECUTE cached; RESET SESSION AUTHORIZATION; SET session_replication_role='replica'; SET SESSION AUTHORIZATION authenticated; EXECUTE cached;")
    self.assertNotEqual(result.returncode,0);self.assertIn('42501',result.stderr)
    self.assertEqual(int(self.good(f"SELECT version FROM public.erp_products WHERE tenant_id='{T}' AND id='{product}'")),version+1)
-  finally: self.good((REC/'phase-2a-enter-maintenance.sql').read_text())
+  finally: self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
  def test_runtime_fence_blocks_reads_and_privileged_delegation_rpc(self):
   self.good(RESUME)
   try:
@@ -178,7 +178,7 @@ class AfterSeal(unittest.TestCase):
    self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'0')
    result=self.sql(prefix+f"SELECT public.erp_set_role_permissions('{T}','employee',ARRAY[]::text[],0)")
    self.assertNotEqual(result.returncode,0);self.assertIn('55000',result.stderr);self.assertIn('ERP_RUNTIME_UNAVAILABLE',result.stderr)
-  finally: self.good((REC/'phase-2a-enter-maintenance.sql').read_text())
+  finally: self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
  def test_runtime_configuration_repair_and_intact_resume(self):
   self.good("ALTER ROLE authenticated IN DATABASE postgres SET session_replication_role='replica'")
   result=self.sql(RESUME);self.assertNotEqual(result.returncode,0)
@@ -186,7 +186,7 @@ class AfterSeal(unittest.TestCase):
   self.good('ALTER ROLE authenticated IN DATABASE postgres RESET session_replication_role')
   self.good(RESUME);self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'f')
   self.denied('SELECT payload FROM public.tenant_data',OWNER)
-  self.good((REC/'phase-2a-enter-maintenance.sql').read_text())
+  self.good((REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
 
 if __name__=='__main__':
  cases=[cls(name) for cls in [BeforeSeal,AfterSeal] for name in cls.__dict__ if name.startswith('test_') and (not sys.argv[1:] or name in sys.argv[1:])]

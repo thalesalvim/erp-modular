@@ -17,10 +17,10 @@ class BeforeFirstSeal(b.BeforeSeal):
  def test_original_acceptance_then_new_preventive_refusal(self):
   for table in ['public.erp_expenses','private.erp_membership_revocations']:
    with self.subTest(table=table):
-    prefix='BEGIN;ALTER TABLE '+table+' SET UNLOGGED;'+b.body(b.B.read_text())
+    prefix='BEGIN;ALTER TABLE '+table+' SET UNLOGGED;'+b.body(b.B.read_bytes().decode('utf-8'))
     # Reproduce the original acceptance, without repeating destructive crashes.
     self.good(prefix+';ROLLBACK;')
-    result=self.sql(prefix+';'+b.body(D.read_text())+';COMMIT;')
+    result=self.sql(prefix+';'+b.body(D.read_bytes().decode('utf-8'))+';COMMIT;')
     self.assertNotEqual(result.returncode,0);self.assertIn('DURABILITY_INVARIANT',result.stderr)
     self.assertEqual(self.good("SELECT to_regclass('private.erp_recovery_schema_seal_v2') IS NULL"),'t')
 
@@ -38,13 +38,13 @@ class BeforeUpgrade(b.AfterSeal):
  def test_unsafe_upgrade_leaves_object_unconverted_and_no_v2(self):
   self.good('ALTER TABLE public.erp_expenses SET UNLOGGED')
   try:
-   result=self.sql(D.read_text());self.assertNotEqual(result.returncode,0);self.assertIn('DURABILITY_INVARIANT',result.stderr)
+   result=self.sql(D.read_bytes().decode('utf-8'));self.assertNotEqual(result.returncode,0);self.assertIn('DURABILITY_INVARIANT',result.stderr)
    self.assertEqual(self.good("SELECT relpersistence FROM pg_class WHERE oid='public.erp_expenses'::regclass"),'u')
    self.assertEqual(self.good("SELECT to_regclass('private.erp_recovery_schema_seal_v2') IS NULL"),'t')
   finally:self.good('ALTER TABLE public.erp_expenses SET LOGGED')
  def test_upgrade_failure_rolls_back_functions_and_reference(self):
   before=self.good('SELECT md5(snapshot::text) FROM private.erp_recovery_schema_seal')
-  result=self.sql('BEGIN;'+b.body(D.read_text())+';SELECT 1/0;COMMIT;')
+  result=self.sql('BEGIN;'+b.body(D.read_bytes().decode('utf-8'))+';SELECT 1/0;COMMIT;')
   self.assertNotEqual(result.returncode,0);self.assertIn('22012',result.stderr)
   self.assertEqual(self.good("SELECT to_regclass('private.erp_recovery_schema_seal_v2') IS NULL"),'t')
   self.assertEqual(self.good('SELECT md5(snapshot::text) FROM private.erp_recovery_schema_seal'),before)
@@ -58,8 +58,8 @@ class BeforeUpgrade(b.AfterSeal):
   revision=self.good(f"SELECT activity_revision FROM public.tenant_memberships WHERE tenant_id='{T}' AND user_id='{manager}'")
   self.good(f"SELECT * FROM public.erp_restore_membership('{T}','{manager}',{revision},true,ARRAY['products.read'],NULL)",owner)
   before=self.good('SELECT md5(snapshot::text) FROM private.erp_recovery_schema_seal')
-  self.good((b.REC/'phase-2a-enter-maintenance.sql').read_text())
-  self.good(D.read_text())
+  self.good((b.REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
+  self.good(D.read_bytes().decode('utf-8'))
   self.assertEqual(self.good('SELECT md5(snapshot::text) FROM private.erp_recovery_schema_seal'),before)
   self.assertEqual(self.good('SELECT count(*) FROM public.erp_expenses'),'3')
   self.good(b.RESUME)
@@ -70,7 +70,7 @@ class BeforeUpgrade(b.AfterSeal):
 
 class Installed(b.AfterSeal):
  def test_complete_explicit_inventory_and_snapshot(self):
-  names=re.findall(r"'((?:public|private|auth)\.[a-z0-9_]+)'",D.read_text().split(' ] LOOP')[0])
+  names=re.findall(r"'((?:public|private|auth)\.[a-z0-9_]+)'",D.read_bytes().decode('utf-8').split(' ] LOOP')[0])
   self.assertEqual(len(names),47);self.assertEqual(len(set(names)),47)
   for name in names:
    with self.subTest(table=name):
@@ -106,7 +106,7 @@ class Installed(b.AfterSeal):
   self.good(b.RESUME)
   self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'f')
   self.denied('SELECT payload FROM public.tenant_data',b.OWNER)
-  self.good((b.REC/'phase-2a-enter-maintenance.sql').read_text())
+  self.good((b.REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
 
 if __name__=='__main__':
  classes=[BeforeFirstSeal,BeforeUpgrade,Installed]

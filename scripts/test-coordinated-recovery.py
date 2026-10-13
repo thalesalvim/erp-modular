@@ -139,10 +139,10 @@ class RecoveryIntegrity(unittest.TestCase):
  denied=r.f.ProductConcurrency.denied
  @classmethod
  def setUpClass(cls): r.f.ProductConcurrency.setUpClass.__func__(cls)
- def setUp(self): self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
- def tearDown(self): self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+ def setUp(self): self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
+ def tearDown(self): self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
  def attack(self,ddl):
-  resume=(RECOVERY/'phase-2a-resume-normalized.sql').read_text().replace('BEGIN;','').replace('COMMIT;','')
+  resume=(RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8').replace('BEGIN;','').replace('COMMIT;','')
   result=self.sql('BEGIN;'+ddl+';'+resume+';COMMIT;')
   self.assertNotEqual(result.returncode,0,result.stdout)
   self.assertIn('RECOVERY_SCHEMA_DRIFT',result.stderr)
@@ -152,7 +152,7 @@ class RecoveryIntegrity(unittest.TestCase):
   definition=self.good("SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid='public.erp_products'::regclass AND tgname='erp_guard_record'")
   self.good('DROP TRIGGER erp_guard_record ON public.erp_products')
   try:
-   result=self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+   result=self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
    self.assertNotEqual(result.returncode,0); self.assertIn('RECOVERY_SCHEMA_DRIFT',result.stderr)
    self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'t')
    self.assertEqual(self.good("SELECT count(*) FROM pg_trigger WHERE tgrelid='public.erp_products'::regclass AND tgname='erp_guard_record'"),'0')
@@ -183,7 +183,7 @@ class RecoveryIntegrity(unittest.TestCase):
  def test_changed_rpc_search_path(self):
   self.attack("ALTER FUNCTION public.erp_recover_employee_membership(uuid,uuid,uuid,bigint,bigint,boolean,text[]) SET search_path=public")
  def test_bootstrap_refuses_preexisting_drift(self):
-  source=(Path(__file__).resolve().parents[1]/'supabase/migrations/20261012030100_erp_recovery_integrity.sql').read_text()
+  source=(Path(__file__).resolve().parents[1]/'supabase/migrations/20261012030100_erp_recovery_integrity.sql').read_bytes().decode('utf-8')
   check=source.split('-- BEGIN_EXPECTED_DEFINITIONS')[1].split('-- END_EXPECTED_DEFINITIONS')[0]
   for ddl in ['DROP TRIGGER erp_guard_record ON public.erp_products','GRANT UPDATE(price) ON public.erp_products TO authenticated']:
    result=self.sql('BEGIN;'+ddl+';'+check+';ROLLBACK;')
@@ -195,12 +195,12 @@ class RecoveryIntegrity(unittest.TestCase):
   self.denied('SELECT private.erp_recovery_schema_snapshot()',OWNER)
  def test_intact_schema_allows_resume_preserving_data(self):
   before=self.good("SELECT md5(string_agg(to_jsonb(s)::text,'' ORDER BY tenant_id,id)) FROM public.erp_sales s")
-  self.good((RECOVERY/'phase-2a-verify.sql').read_text())
-  self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+  self.good((RECOVERY/'phase-2a-verify.sql').read_bytes().decode('utf-8'))
+  self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
   self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'f')
   self.assertEqual(self.good("SELECT md5(string_agg(to_jsonb(s)::text,'' ORDER BY tenant_id,id)) FROM public.erp_sales s"),before)
   self.denied('SELECT payload FROM public.tenant_data',OWNER)
-  self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
+  self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
 
 if __name__=='__main__':
  classes=[CoordinatedRecovery,RecoveryIntegrity]

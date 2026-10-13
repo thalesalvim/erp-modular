@@ -75,8 +75,8 @@ class Bootstrap(b.BeforeSeal):
 
     def test_initial_safe_provider_configuration_and_resume(self):
         # Full transaction rolls back so this class still has no seal afterwards.
-        statements = ('BEGIN;' + PROVIDER + b.body(b.B.read_text()) +
-                      b.body((b.REC/'phase-2a-enter-maintenance.sql').read_text()) +
+        statements = ('BEGIN;' + PROVIDER + b.body(b.B.read_bytes().decode('utf-8')) +
+                      b.body((b.REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8')) +
                       b.body(b.RESUME) + "SELECT maintenance FROM private.erp_runtime_control;ROLLBACK;")
         self.assertEqual(self.good(statements), 'f')
         self.assertEqual(self.good("SELECT to_regclass('private.erp_recovery_schema_seal') IS NULL"), 't')
@@ -85,7 +85,7 @@ class Bootstrap(b.BeforeSeal):
         # No membership is inferred safe from rolINHERIT alone; safe empty graphs work.
         ddl = ('ALTER ROLE authenticated NOINHERIT; CREATE ROLE b3_dba SUPERUSER NOLOGIN; '
                'GRANT authenticated TO b3_dba')
-        self.good('BEGIN;' + ddl + ';' + b.body(b.B.read_text()) + ';ROLLBACK;')
+        self.good('BEGIN;' + ddl + ';' + b.body(b.B.read_bytes().decode('utf-8')) + ';ROLLBACK;')
 
 class Installed(b.AfterSeal):
     def test_unsafe_attributes_and_memberships_after_seal_fail_closed(self):
@@ -110,13 +110,13 @@ class Provider(b.BeforeSeal):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        for sql in [PROVIDER, b.B.read_text()]:
+        for sql in [PROVIDER, b.B.read_bytes().decode('utf-8')]:
             result = cls.sql(sql)
             if result.returncode:
                 raise RuntimeError(result.stderr)
 
     def test_provider_connections(self):
-        self.good((b.REC/'phase-2a-enter-maintenance.sql').read_text())
+        self.good((b.REC/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
         self.good(b.RESUME)
         # Existing connection can SET LOCAL ROLE for successive requests; mode and
         # identity stay operational. Another connection uses the same broker model.

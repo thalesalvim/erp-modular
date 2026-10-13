@@ -119,10 +119,10 @@ class MembershipRevocation(unittest.TestCase):
    result=second.result(); self.assertNotEqual(result.returncode,0); self.assertIn('40001',result.stderr)
   self.assertEqual(self.good(f"SELECT count(*) FROM private.erp_membership_revocation_audit WHERE user_id='{self.user}'"),'1')
  def test_z_maintenance_blocks_review_and_revocation(self):
-  self.good((lifecycle.RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
+  self.good((lifecycle.RECOVERY/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
   self.denied(self.revoke(),OWNER)
   self.denied(f"SELECT * FROM public.erp_review_memberships('{T}')",OWNER)
-  self.good((lifecycle.RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+  self.good((lifecycle.RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
   self.assertEqual(self.good(f"SELECT is_active FROM public.tenant_memberships WHERE tenant_id='{T}' AND user_id='{self.user}'"),'t')
 
 if __name__=='__main__': unittest.main(verbosity=2)

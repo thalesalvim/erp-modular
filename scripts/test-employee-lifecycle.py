@@ -2,11 +2,8 @@
 """Lifecycle/recovery probes in disposable PostgreSQL 17.11; no remote DSN/data."""
 import concurrent.futures
 import importlib.util
-import os
 from pathlib import Path
-import subprocess
 import sys
-import time
 import unittest
 
 sys.dont_write_bytecode = True
@@ -129,19 +126,9 @@ class EmployeeLifecycle(unittest.TestCase):
 
     def test_before_use_ddl_rollback_preserves_closed_json_and_original_data(self):
         # Fresh cluster: roles are cluster-wide, so a second database is insufficient.
-        name = f'handyhub-rollback-before-{os.getpid()}'
-        subprocess.run(['docker','run','-d','--rm','--name',name,'--network','none','--tmpfs','/var/lib/postgresql/data',
-                        '-e','POSTGRES_HOST_AUTH_METHOD=trust',fixture.IMAGE],check=True,stdout=subprocess.DEVNULL)
-        try:
-            for _ in range(100):
-                ready = subprocess.run(['docker','exec',name,'sh','-c','test "$(cat /proc/1/comm)" = postgres && pg_isready -U postgres'],
-                                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-                if ready.returncode==0: break
-                time.sleep(.1)
-            else: self.fail('Fresh PostgreSQL not ready')
+        with fixture.disposable_postgres('rollback') as cluster:
             def query(statement):
-                return subprocess.run(['docker','exec','-i',name,'psql','-X','-U','postgres','-Atq','-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose'],
-                                      input=statement,text=True,capture_output=True,timeout=30)
+                return cluster.sql(statement, timeout=30)
             js = """
 import {setup,additions,read} from './tests/helpers/tenant-domain-fixture.mjs';
 const out=[]; const q=v=>v===null?'NULL':typeof v==='number'?String(v):"'"+v.replaceAll("'","''")+"'";
@@ -155,14 +142,12 @@ out.push('BEGIN;');
 for(const f of additions) out.push((await read('supabase/migrations/'+f)).replace(/^BEGIN;$/gm,'').replace(/^COMMIT;$/gm,''));
 out.push('ROLLBACK;');process.stdout.write(out.join('\\n'));
 """
-            sql = subprocess.run(['node','--input-type=module','-e',js],cwd=fixture.ROOT,capture_output=True,text=True,check=True).stdout
+            sql = fixture.record_fixture(js)
             result = query(sql); self.assertEqual(result.returncode,0,result.stderr)
             result = query("SELECT to_regclass('public.erp_employees') IS NULL,to_regclass('private.erp_runtime_control') IS NULL; SELECT count(*),bool_and(payload=jsonb_build_object('untouched',right(tenant_slug,1))) FROM public.tenant_data;")
             self.assertEqual(result.returncode,0,result.stderr); self.assertEqual(result.stdout.strip(),'t|t\n3|t')
             result = query(f"SET SESSION AUTHORIZATION authenticated; SET request.jwt.claim.sub='{EMPLOYEE}'; SELECT payload FROM public.tenant_data;")
             self.assertNotEqual(result.returncode,0); self.assertIn('42501',result.stderr)
-        finally:
-            subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
     def test_retention_fks_and_immutable_audit_prevent_cascading_deletion(self):
         sale = self.post(); self.good(self.command(False),OWNER)
@@ -193,28 +178,28 @@ out.push('ROLLBACK;');process.stdout.write(out.join('\\n'));
 
     def test_maintenance_resume_preserves_operations_and_never_restores_json(self):
         sale = self.post(); before = sale.sale_state()
-        self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
+        self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
         self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'t')
         self.denied(self.command(False),OWNER)
         self.denied(fixture.rpc(history.PRODUCT,sale.product_version,{'price':101}),OWNER)
         self.denied("UPDATE public.erp_products SET name='blocked'",None,'55000')
         self.denied('SELECT payload FROM public.tenant_data',EMPLOYEE)
-        self.good('BEGIN READ ONLY;'+(RECOVERY/'phase-2a-verify.sql').read_text()+'COMMIT;')
+        self.good('BEGIN READ ONLY;'+(RECOVERY/'phase-2a-verify.sql').read_bytes().decode('utf-8')+'COMMIT;')
         self.assertEqual(sale.sale_state(),before)
-        self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+        self.good((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
         self.denied('DELETE FROM private.erp_recovery_events',None,'55000')
         self.denied('SELECT payload FROM public.tenant_data',EMPLOYEE)
         self.denied('SELECT payload FROM public.tenant_data',OWNER)
         self.assertEqual(sale.sale_state(),before)
 
     def test_resume_rejects_disabled_integrity_trigger_and_unsafe_legacy_grants(self):
-        self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_text())
+        self.good((RECOVERY/'phase-2a-enter-maintenance.sql').read_bytes().decode('utf-8'))
         self.good('ALTER TABLE public.erp_sales DISABLE TRIGGER erp_validate_history')
-        result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+        result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
         self.assertNotEqual(result.returncode,0); self.assertIn('RECOVERY_SCHEMA_DRIFT',result.stderr)
         self.assertEqual(self.good('SELECT maintenance FROM private.erp_runtime_control'),'t')
         self.good('ALTER TABLE public.erp_sales ENABLE TRIGGER erp_validate_history; GRANT SELECT(payload) ON public.tenant_data TO authenticated')
-        result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_text())
+        result = self.sql((RECOVERY/'phase-2a-resume-normalized.sql').read_bytes().decode('utf-8'))
         self.assertNotEqual(result.returncode,0); self.assertIn('UNSAFE_LEGACY_FALLBACK',result.stderr)
         self.good('REVOKE SELECT(payload) ON public.tenant_data FROM authenticated')
 

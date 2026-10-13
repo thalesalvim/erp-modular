@@ -5,15 +5,30 @@ Requires Docker, the pinned image already downloaded, Node and repo dependencies
 """
 import concurrent.futures
 import json
-import os
 from pathlib import Path
 import subprocess
 import time
 import unittest
 
+from postgres_harness import DisposablePostgres, HarnessSafetyError, IMAGE
+
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = 'postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
-CONTAINER = f'handyhub-occ-{os.getpid()}'
+_postgres = None
+
+
+def record_fixture(js):
+    if _postgres is None:
+        raise HarnessSafetyError('No validated local fixture environment')
+    result = subprocess.run(['node', '--input-type=module', '-e', js], cwd=ROOT,
+                            capture_output=True, text=False,
+                            env=dict(_postgres.client.environment), check=True)
+    return result.stdout.decode('utf-8')
+
+
+def disposable_postgres(purpose):
+    if _postgres is None:
+        raise HarnessSafetyError('No validated local fixture environment')
+    return DisposablePostgres(_postgres.client, purpose=purpose)
 
 
 def uuid(n):
@@ -38,22 +53,10 @@ def rpc(product, expected, base=None, cost=None, stock=None, tenant=TENANT):
 class ProductConcurrency(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        subprocess.run(['docker', 'image', 'inspect', IMAGE], check=True, stdout=subprocess.DEVNULL)
-        cls.addClassCleanup(lambda: subprocess.run(['docker', 'rm', '-f', CONTAINER],
-                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-        subprocess.run(['docker', 'run', '-d', '--rm', '--name', CONTAINER, '--network', 'none',
-                        '--tmpfs', '/var/lib/postgresql/data', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
-                        IMAGE], check=True, stdout=subprocess.DEVNULL)
-        for _ in range(100):
-            # initdb starts a temporary server, then stops it before PID 1 execs
-            # the final postgres process. Do not treat that temporary socket as ready.
-            if subprocess.run(['docker', 'exec', CONTAINER, 'sh', '-c',
-                               'test "$(cat /proc/1/comm)" = postgres && pg_isready -U postgres'],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-                break
-            time.sleep(.1)
-        else:
-            raise RuntimeError('Local PostgreSQL did not become ready')
+        global _postgres
+        _postgres = DisposablePostgres()
+        cls.addClassCleanup(_postgres.close)
+        _postgres.start()
         # Reuse synthetic fixtures through an SQL recorder, not PGlite execution.
         js = """
 import { setup, seed, additions, read } from './tests/helpers/tenant-domain-fixture.mjs';
@@ -68,20 +71,19 @@ for(const f of additions) await db.exec(await read('supabase/migrations/'+f));
 await seed(db);
 process.stdout.write(statements.join('\\n'));
 """
-        fixture = subprocess.run(['node', '--input-type=module', '-e', js], cwd=ROOT,
-                                 capture_output=True, text=True, check=True).stdout
+        fixture = record_fixture(js)
         result = cls.sql(fixture)
         if result.returncode:
             raise RuntimeError(result.stderr)
         print(cls.sql('SELECT version();').stdout.strip(), flush=True)
 
     @staticmethod
-    def sql(statement, user=None, role='authenticated'):
+    def sql(statement, user=None, role='authenticated', *, database_user='postgres'):
         if user or role == 'anon':
             statement = f"SET SESSION AUTHORIZATION {role}; SET request.jwt.claim.sub='{user or ''}';\n" + statement
-        return subprocess.run(['docker', 'exec', '-i', CONTAINER, 'psql', '-X', '-U', 'postgres',
-                               '-Atq', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose'],
-                              input=statement, capture_output=True, text=True, timeout=20)
+        if _postgres is None:
+            raise HarnessSafetyError('No confirmed local PostgreSQL fixture')
+        return _postgres.sql(statement, database_user=database_user)
 
     def good(self, statement, user=None):
         result = self.sql(statement, user)
