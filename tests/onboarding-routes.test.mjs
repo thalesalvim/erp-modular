@@ -103,31 +103,55 @@ test('Master ignores metadata admin claims and requires a database platform_admi
 });
 
 function teamHandler({ user = { id: callerId }, member = { tenant_id: tenantA, user_id: callerId, role: 'owner', is_active: true },
-  membershipError = null, invitationError = null, insertError = null, env = { AUTH_INVITE_TEMPLATE_MODE: 'token_hash', NEXT_PUBLIC_SITE_URL: origin } } = {}) {
+  membershipError = null, invitationError = null, insertError = null, bindError = null, bindThrows = false, onInvite = () => {},
+  env = { AUTH_INVITE_TEMPLATE_MODE: 'token_hash', NEXT_PUBLIC_SITE_URL: origin } } = {}) {
   const trace = [], logs = [];
-  let elevatedClients = 0;
-  const caller = { auth: { getUser: async () => ({ data: { user }, error: null }) }, from: (table) => {
-    assert.equal(table, 'tenant_memberships');
-    const result = { data: member, error: membershipError };
-    const builder = query(table, result, trace);
-    builder.maybeSingle = async () => {
-      const filters = trace.at(-1).filters;
-      return { data: member && filters.every(([key, value]) => member[key] === value) ? member : null, error: membershipError };
-    };
-    return builder;
-  } };
+  const authorizationId = '40000000-0000-4000-8000-00000000000a';
+  let elevatedClients = 0, prepared = null, bound = null, associated = false;
+  const allowed = (params) => user && member && member.tenant_id === params.p_tenant && member.user_id === user.id
+    && member.is_active && authorization.isTenantRole(member.role) && authorization.mayInviteRole(member.role, params.p_role);
+  const caller = { auth: { getUser: async () => ({ data: { user }, error: null }) },
+    from: () => { throw new Error('Invitation must use authenticated RPCs, not a cached membership lookup'); },
+    rpc: async (name, params) => {
+      trace.push({ operation: 'rpc', name, params: normalize(params) });
+      if (name === 'erp_authorize_invitation') {
+        if (membershipError) return { data: null, error: membershipError };
+        if (!allowed(params)) return { data: null, error: { code: '42501' } };
+        prepared = normalize(params);
+        return { data: authorizationId, error: null };
+      }
+      assert.equal(name, 'erp_create_invited_membership');
+      if (!allowed(params) || !prepared || bound !== params.p_invited_user || params.p_authorization !== authorizationId
+        || prepared.p_tenant !== params.p_tenant || prepared.p_role !== params.p_role) {
+        return { data: null, error: { code: '42501' } };
+      }
+      if (insertError) return { data: null, error: insertError };
+      associated = true;
+      return { data: bound, error: null };
+    } };
   const route = load('app/api/team/invite/route.ts', {
-    'next/server': { NextResponse }, '@/lib/auth/authorization': authorization, '@/lib/auth/invitations': invitations,
+    'next/server': { NextResponse }, '@/lib/auth/invitations': invitations,
     '@/lib/supabase/server': { createServerSupabaseClient: async () => caller },
     '@/lib/supabase/admin': { createSupabaseAdminClient: () => {
       elevatedClients++;
       return { auth: { admin: { inviteUserByEmail: async (email, options) => {
         trace.push({ operation: 'invite', email, options: normalize(options) });
+        await onInvite();
         return { data: { user: invitationError ? null : { id: invitedId } }, error: invitationError };
-      } } }, from: (table) => query(table, { data: null, error: insertError }, trace) };
+      } } }, from: () => { throw new Error('Forbidden service_role membership insertion'); },
+      rpc: async (name, params) => {
+        trace.push({ operation: 'rpc', name, params: normalize(params) });
+        assert.equal(name, 'erp_bind_invited_membership');
+        assert.equal(params.p_authorization, authorizationId);
+        assert.equal(params.p_invited_user, invitedId);
+        if (bindThrows) throw new Error('sensitive-network-detail');
+        if (bindError) return { data: null, error: bindError };
+        bound = params.p_invited_user;
+        return { data: null, error: null };
+      } };
     } },
   }, env, logs);
-  return { route, trace, logs, elevatedClients: () => elevatedClients };
+  return { route, trace, logs, elevatedClients: () => elevatedClients, associated: () => associated };
 }
 const employeeInput = { tenantId: tenantA, email: 'employee-c@example.invalid', role: 'employee' };
 
@@ -149,7 +173,8 @@ test('Employee invitation rejects foreign/inactive memberships and employee meta
       member: { tenant_id: tenantA, user_id: callerId, role: 'owner', is_active: true, ...change } });
     assert.equal((await handler.route.POST(request('/api/team/invite', employeeInput))).status, 403);
     assert.equal(handler.elevatedClients(), 0);
-    assert.deepEqual(handler.trace[0].filters, [['tenant_id', tenantA], ['user_id', callerId], ['is_active', true]]);
+    assert.equal(handler.trace[0].name, 'erp_authorize_invitation');
+    assert.deepEqual(handler.trace[0].params, { p_tenant: tenantA, p_role: 'employee' });
   }
 });
 
@@ -179,8 +204,10 @@ test('Authorized employee invitation uses the Auth-returned UID and the reviewed
     assert.equal(response.status, 201);
     assert.deepEqual(await response.json(), { accepted: true, userId: invitedId });
     assert.deepEqual(handler.trace[1].options, { redirectTo: origin + '/auth/callback' });
-    assert.equal(handler.trace[2].table, 'tenant_memberships');
-    assert.deepEqual(handler.trace[2].value, { tenant_id: tenantA, user_id: invitedId, role: 'employee', is_active: true });
+    assert.equal(handler.trace[2].name, 'erp_bind_invited_membership');
+    assert.equal(handler.trace[3].name, 'erp_create_invited_membership');
+    assert.deepEqual(handler.trace[3].params, { p_tenant: tenantA, p_invited_user: invitedId, p_role: 'employee', p_authorization: handler.trace[2].params.p_authorization });
+    assert.equal(handler.associated(), true);
   }
 });
 
@@ -196,7 +223,81 @@ test('Failed or existing-account invitation never creates membership or reports 
   const partial = teamHandler({ insertError: { code: 'synthetic_membership_failure' } });
   const response = await partial.route.POST(request('/api/team/invite', employeeInput));
   assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /associação não foi concluída/);
+  assert.match((await response.json()).error, /confirmar a associação/);
+});
+
+
+test('Invitation must not associate a user after inviter revocation', async () => {
+  const member = {
+    tenant_id: tenantA,
+    user_id: callerId,
+    role: 'owner',
+    is_active: true,
+  };
+
+  const handler = teamHandler({
+    member,
+    onInvite: () => {
+      member.is_active = false;
+    },
+  });
+
+  const response = await handler.route.POST(
+    request('/api/team/invite', employeeInput)
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal(handler.trace.at(-1).name, 'erp_create_invited_membership');
+  assert.equal(handler.associated(), false);
+
+  assert.equal(
+    handler.trace.some(
+      (entry) =>
+        entry.table === 'tenant_memberships' &&
+        entry.operation === 'insert'
+    ),
+    false
+  );
+});
+
+test('Invitation binds only the server-returned UID and stops on binding failure', async () => {
+  const handler = teamHandler({ bindError: { code: 'private_bind_failure', message: 'secret-detail' } });
+  const response = await handler.route.POST(request('/api/team/invite', employeeInput));
+  assert.equal(response.status, 502);
+  assert.equal(handler.associated(), false);
+  assert.equal(handler.trace.at(-1).name, 'erp_bind_invited_membership');
+  assert.doesNotMatch(JSON.stringify(await response.json()), /secret-detail|private_bind_failure/);
+});
+
+test('Invitation maps SQL denials/conflicts/maintenance without pretending to cancel an email', async () => {
+  for (const [code, status] of [['42501', 403], ['23505', 409], ['40001', 409], ['55000', 503], ['XX000', 502]]) {
+    const handler = teamHandler({ insertError: { code, message: 'internal-schema-detail' } });
+    const response = await handler.route.POST(request('/api/team/invite', employeeInput));
+    assert.equal(response.status, status);
+    assert.equal(handler.associated(), false);
+    const body = await response.json();
+    assert.match(body.error, /e-mail não foi cancelado/);
+    assert.doesNotMatch(JSON.stringify(body), /internal-schema-detail/);
+  }
+});
+
+test('Invitation rejects an oversized body before database authorization or Auth dispatch', async () => {
+  const handler = teamHandler();
+  const response = await handler.route.POST(request('/api/team/invite', { ...employeeInput, email: 'x'.repeat(5000) }));
+  assert.equal(response.status, 400);
+  assert.equal(handler.trace.length, 0);
+  assert.equal(handler.elevatedClients(), 0);
+});
+
+test('Post-dispatch exception reports an uncertain association without exposing details or canceling email', async () => {
+  const handler = teamHandler({ bindThrows: true });
+  const response = await handler.route.POST(request('/api/team/invite', employeeInput));
+  assert.equal(response.status, 503);
+  assert.equal(handler.associated(), false);
+  const body = await response.json();
+  assert.match(body.error, /confirmar a associação/);
+  assert.match(body.error, /e-mail não foi cancelado/);
+  assert.doesNotMatch(JSON.stringify(body), /sensitive-network-detail/);
 });
 
 test('Master handler provisions a fixed Owner and activates only the Auth-returned membership after finalization', async () => {

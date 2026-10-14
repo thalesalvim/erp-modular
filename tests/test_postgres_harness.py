@@ -484,12 +484,21 @@ class ContainerOwnershipTests(unittest.TestCase):
 
 
 class HarnessIntegrationTests(unittest.TestCase):
-    def test_all_ten_entrypoints_import_offline_and_use_shared_sql_transport(self):
-        paths = sorted((ROOT / 'scripts').glob('test-*.py'))
-        self.assertEqual(len(paths), 10)
-        with patch.object(subprocess, 'run', side_effect=AssertionError('No subprocess permitted during import')):
+    def test_registered_entrypoints_import_offline_and_use_shared_sql_transport(self):
+        # Explicit supported entrypoints: preserve unrelated experimental probes
+        # without accidentally treating them as approved production harnesses.
+        names = ['test-appointment-read.py', 'test-coordinated-recovery.py',
+                 'test-employee-lifecycle.py', 'test-historical-snapshots.py',
+                 'test-membership-restoration.py', 'test-membership-revocation.py',
+                 'test-product-concurrency.py', 'test-recovery-durability.py',
+                 'test-recovery-role-invariants.py', 'test-recovery-seal-hardening.py',
+                 'test-invitation-atomic.py', 'test-invitation-v3-regressions.py']
+        paths = [ROOT / 'scripts' / name for name in names]
+        with patch.object(subprocess, 'run', side_effect=AssertionError('No subprocess permitted during import')), \
+             patch.object(subprocess, 'Popen', side_effect=AssertionError('No subprocess permitted during import')):
             for path in paths:
                 with self.subTest(script=path.name):
+                    self.assertTrue(path.is_file(), 'Registered harness missing: ' + path.name)
                     spec = importlib.util.spec_from_file_location('offline_' + path.stem, path)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)

@@ -43,7 +43,7 @@ class MembershipRevocation(unittest.TestCase):
   self.assertGreater(int(self.good(f"SELECT count(*) FROM public.erp_products WHERE tenant_id='{T}'",self.user)),0)
   self.good(self.revoke(),OWNER)
   self.assertEqual(self.good(f"SELECT count(*) FROM public.erp_products WHERE tenant_id='{T}'",self.user),'0')
-  self.assertEqual(self.good(f"SELECT count(*) FROM public.tenant_data WHERE tenant_id='{T}'",self.user),'0')
+  f.assert_legacy_read(self,T,self.user,'0')
  def test_linked_deactivated_member_explicit_revoke_prevents_lifecycle_restore(self):
   self.link()
   self.good(f"SELECT * FROM public.erp_set_employee_active('{T}','{self.staff}',1,false,'offboarding')",OWNER)
@@ -71,7 +71,7 @@ class MembershipRevocation(unittest.TestCase):
   self.good(f"INSERT INTO public.platform_admins(user_id) VALUES('{self.user}')")
   self.good(self.revoke(),OWNER)
   self.assertEqual(self.good(f"SELECT count(*) FROM public.erp_products WHERE tenant_id='{T}'",self.user),'0')
-  self.assertEqual(self.good(f"SELECT count(*) FROM public.tenant_data WHERE tenant_id='{T}'",self.user),'1')
+  f.assert_legacy_read(self,T,self.user,'1')
   self.assertEqual(self.good(f"SELECT count(*) FROM public.platform_admins WHERE user_id='{self.user}'"),'1')
  def test_direct_reactivation_and_delete_recreate_are_blocked(self):
   self.good(self.revoke(),OWNER)

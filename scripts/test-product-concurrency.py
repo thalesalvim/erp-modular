@@ -43,6 +43,22 @@ def quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def assert_legacy_read(case, tenant, user, expected_open_count):
+    """Historical open fixture versus explicitly resumed/closed v3 fixture.
+    Never synthesize a successful query: the closed mode requires a REAL 42501
+    and zero table/column SELECT grants, including Master. Master identity itself
+    is checked independently, rather than treating legacy JSON as its authority.
+    """
+    query = f"SELECT count(*) FROM public.tenant_data WHERE tenant_id={quote(tenant)}"
+    if getattr(case, 'legacy_closed', False):
+        case.denied(query, user)
+        case.assertEqual(case.good("SELECT has_table_privilege('authenticated','public.tenant_data','SELECT') OR has_any_column_privilege('authenticated','public.tenant_data','SELECT')"), 'f')
+        if expected_open_count == '1':
+            case.assertEqual(case.good('SELECT private.is_platform_admin()', user), 't')
+    else:
+        case.assertEqual(case.good(query, user), expected_open_count)
+
+
 def rpc(product, expected, base=None, cost=None, stock=None, tenant=TENANT):
     patches = ','.join(quote(json.dumps(p if p is not None else {})) + '::jsonb'
                        for p in (base, cost, stock))

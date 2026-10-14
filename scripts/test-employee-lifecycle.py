@@ -52,7 +52,8 @@ class EmployeeLifecycle(unittest.TestCase):
         self.good(self.command(False), OWNER)
         self.assertEqual(self.active(),'f')
         for table in ['erp_appointments','erp_sales','erp_attendances','tenant_data']:
-            self.assertEqual(self.good(f"SELECT count(*) FROM public.{table} WHERE tenant_id='{T}'", EMPLOYEE),'0')
+            if table=='tenant_data': fixture.assert_legacy_read(self,T,EMPLOYEE,'0')
+            else: self.assertEqual(self.good(f"SELECT count(*) FROM public.{table} WHERE tenant_id='{T}'", EMPLOYEE),'0')
         self.denied(f"SELECT * FROM public.erp_read_own_appointments('{T}')", EMPLOYEE)
         self.assertEqual(sale.sale_state(),before)
         self.assertEqual(self.good(f"SELECT auth_user_id FROM private.erp_employee_auth_links WHERE tenant_id='{T}' AND employee_id='{STAFF}'"),links)
@@ -97,7 +98,7 @@ class EmployeeLifecycle(unittest.TestCase):
         self.denied(f"UPDATE public.tenant_memberships SET is_active=true WHERE tenant_id='{T}' AND user_id='{EMPLOYEE}'",None,'42501')
         self.assertEqual(self.active(),'f')
         self.assertEqual(self.good(f"SELECT count(*) FROM public.erp_appointments WHERE tenant_id='{T}'",EMPLOYEE),'0')
-        self.assertEqual(self.good(f"SELECT count(*) FROM public.tenant_data WHERE tenant_id='{T}'",EMPLOYEE),'0')
+        fixture.assert_legacy_read(self,T,EMPLOYEE,'0')
 
     def test_foreign_tenant_and_same_auth_identity_other_tenant_are_independent(self):
         self.denied(self.command(False,tenant=A),OWNER)

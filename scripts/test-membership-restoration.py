@@ -15,7 +15,7 @@ class Restoration(r.MembershipRevocation):
   self.good(self.revoke(),OWNER); self.good(self.restore(),OWNER)
   self.assertGreater(int(self.good(f"SELECT count(*) FROM public.erp_products WHERE tenant_id='{T}'",self.user)),0)
   self.assertEqual(self.good(f"SELECT count(*) FROM public.erp_sales WHERE tenant_id='{T}'",self.user),'0')
-  self.assertEqual(self.good(f"SELECT count(*) FROM public.tenant_data WHERE tenant_id='{T}'",self.user),'0')
+  r.f.assert_legacy_read(self,T,self.user,'0')
   self.assertEqual(self.good(f"SELECT count(*) FROM private.erp_membership_revocation_audit WHERE user_id='{self.user}' AND action='restore' AND next_active"),'1')
  def test_empty_confirmed_permissions_deny_all_business_reads(self):
   self.good(self.revoke(),OWNER); self.good(self.restore(permissions='ARRAY[]::text[]'),OWNER)
@@ -61,7 +61,7 @@ class Restoration(r.MembershipRevocation):
  def test_master_and_auth_are_unchanged(self):
   self.good(f"INSERT INTO public.platform_admins(user_id) VALUES('{self.user}')")
   self.good(self.revoke(),OWNER); self.good(self.restore(),OWNER)
-  self.assertEqual(self.good(f"SELECT count(*) FROM public.tenant_data WHERE tenant_id='{T}'",self.user),'1')
+  r.f.assert_legacy_read(self,T,self.user,'1')
   self.assertEqual(self.good(f"SELECT count(*) FROM auth.users WHERE id='{self.user}'"),'1')
  def test_atomic_rollback_preserves_revocation_and_audit(self):
   self.good(self.revoke(),OWNER); revision=self.revision()

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { isTenantRole, mayInviteRole } from '@/lib/auth/authorization';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { invitationRedirect, parseInvitationInput } from '@/lib/auth/invitations';
@@ -48,18 +47,6 @@ export async function POST(request: Request) {
   }
   const { tenantId, email, role: requestedRole } = input;
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('tenant_memberships')
-    .select('role, is_active')
-    .eq('tenant_id', tenantId)
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .maybeSingle();
-  if (membershipError) return reply({ error: 'Não foi possível confirmar a permissão neste tenant.' }, 503);
-  if (!membership || !isTenantRole(membership.role) || !mayInviteRole(membership.role, requestedRole)) {
-    return reply({ error: 'Sem permissão para convidar este cargo nesta empresa.' }, 403);
-  }
-
   // Set only after the actual Auth email template is configured and reviewed.
   // A default implicit invitation must not be dispatched to a code-only/SSR callback.
   if (process.env.AUTH_INVITE_TEMPLATE_MODE !== 'token_hash') {
@@ -73,7 +60,16 @@ export async function POST(request: Request) {
     return reply({ error: 'Origem de convite indisponível neste ambiente.' }, 503);
   }
 
+  let invitationSent = false;
   try {
+    // Session RPC, never a service_role association. It records the actor from
+    // auth.uid() and refuses disabled tenants, runtime, identities and hierarchy.
+    const { data: authorizationId, error: authorizationError } = await supabase.rpc('erp_authorize_invitation', {
+      p_tenant: tenantId, p_role: requestedRole,
+    });
+    if (authorizationError || typeof authorizationId !== 'string') {
+      return reply({ error: 'Não foi possível autorizar o convite nesta empresa.' }, authorizationError?.code === '42501' ? 403 : 503);
+    }
     const admin = createSupabaseAdminClient();
     const { data: invitation, error: invitationError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
     if (invitationError || !invitation.user) {
@@ -87,18 +83,30 @@ export async function POST(request: Request) {
       const status = invitationError?.status === 429 ? 429 : (invitationError?.status ?? 500) >= 500 ? 502 : 409;
       return reply({ error: 'Não foi possível enviar o convite. Tente novamente mais tarde ou solicite revisão administrativa.' }, status);
     }
+    invitationSent = true;
 
-    const { error: insertError } = await admin.from('tenant_memberships').insert({
-      tenant_id: tenantId,
-      user_id: invitation.user.id,
-      role: requestedRole,
-      is_active: true,
+    // Only this server binds the exact Auth-returned UID to the authorization.
+    // Sending an email cannot be rolled back by a PostgreSQL transaction.
+    const { error: bindError } = await admin.rpc('erp_bind_invited_membership', {
+      p_authorization: authorizationId, p_invited_user: invitation.user.id,
     });
-    if (insertError) {
-      return reply({ error: 'Convite criado, mas a associação não foi concluída; requer revisão administrativa.' }, 502);
+    if (bindError) {
+      return reply({ error: 'Convite enviado, mas a associação não foi concluída; requer revisão administrativa.' }, 502);
+    }
+    // PostgreSQL rechecks and locks current authority through insertion/commit.
+    const { data: associatedUserId, error: associationError } = await supabase.rpc('erp_create_invited_membership', {
+      p_tenant: tenantId, p_invited_user: invitation.user.id, p_role: requestedRole, p_authorization: authorizationId,
+    });
+    if (associationError || associatedUserId !== invitation.user.id) {
+      const status = associationError?.code === '42501' ? 403
+        : ['23505', '40001'].includes(associationError?.code ?? '') ? 409
+          : associationError?.code === '55000' ? 503 : 502;
+      return reply({ error: 'Convite enviado, mas não foi possível confirmar a associação. A autorização deve ser revista; o e-mail não foi cancelado.' }, status);
     }
     return reply({ accepted: true, userId: invitation.user.id }, 201);
   } catch {
-    return reply({ error: 'Convites indisponíveis neste ambiente.' }, 503);
+    return reply({ error: invitationSent
+      ? 'Convite enviado, mas não foi possível confirmar a associação. Requer revisão administrativa; o e-mail não foi cancelado.'
+      : 'Convites indisponíveis neste ambiente.' }, 503);
   }
 }

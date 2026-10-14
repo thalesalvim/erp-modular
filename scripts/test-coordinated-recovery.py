@@ -31,7 +31,8 @@ class CoordinatedRecovery(s.Restoration):
   self.assertEqual(self.good(f"SELECT version FROM public.erp_employees WHERE tenant_id='{T}' AND id='{self.staff}'"),'3')
   self.assertGreater(int(self.good(f"SELECT count(*) FROM public.erp_products WHERE tenant_id='{T}'",self.user)),0)
   for table in ['erp_sale_finance','erp_product_costs','tenant_data']:
-   self.assertEqual(self.good(f"SELECT count(*) FROM public.{table} WHERE tenant_id='{T}'",self.user),'0')
+   if table=='tenant_data': r.f.assert_legacy_read(self,T,self.user,'0')
+   else: self.assertEqual(self.good(f"SELECT count(*) FROM public.{table} WHERE tenant_id='{T}'",self.user),'0')
   self.assertEqual(self.good(f"SELECT count(*) FROM private.erp_membership_revocation_audit WHERE user_id='{self.user}' AND action='restore'"),'1')
   self.assertEqual(self.good(f"SELECT count(*) FROM private.erp_employee_lifecycle_audit WHERE employee_id='{self.staff}' AND next_active"),'1')
  def test_revoke_then_disable_then_joint_recovery(self):
