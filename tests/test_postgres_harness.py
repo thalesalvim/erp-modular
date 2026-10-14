@@ -493,7 +493,7 @@ class HarnessIntegrationTests(unittest.TestCase):
                  'test-product-concurrency.py', 'test-recovery-durability.py',
                  'test-recovery-role-invariants.py', 'test-recovery-seal-hardening.py',
                  'test-invitation-atomic.py', 'test-invitation-v3-regressions.py',
-                 'test-recovery-integrity-v4.py']
+                 'test-recovery-integrity-v4.py', 'test-invitation-lifecycle-v5.py']
         paths = [ROOT / 'scripts' / name for name in names]
         with patch.object(subprocess, 'run', side_effect=AssertionError('No subprocess permitted during import')), \
              patch.object(subprocess, 'Popen', side_effect=AssertionError('No subprocess permitted during import')):
