@@ -1,0 +1,24 @@
+{
+  "profile": "postgres-17.11-handyhub-reviewed-local",
+  "metadata_owner": "postgres",
+  "postgres_major": 17,
+  "postgres_tested": "17.11",
+  "image": "postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+  "canonicalization": "sha256(UTF8(snapshot::pg_catalog.text)) of each complete historical JSONB snapshot",
+  "active_definition_sha256": "de1ef206612099cc770f0719d3e4e442df474a3b96868f537f2e7bfddfd3183f",
+  "snapshot_sha256": {
+    "erp_recovery_schema_seal": "2c2cd5840f1e0f472020d51ee13c4b11b0f3a95d355d00017996d3599821fff9",
+    "erp_recovery_schema_seal_v2": "52b1bef63e2f8cec9c68f0015987b85d86ef005ff382c8de62148e4e25b03912",
+    "erp_recovery_schema_seal_v3": "d3cb51800efc910fb2a605cfe094ee84474d90ff82f58de5c85911ce175634d7"
+  },
+  "reviewed_definition_md5": {
+    "v1": "3a17fd541f024fdb24f6012e9a839b6d",
+    "v2": "7d695927c797983162323c428e392491",
+    "v3": "ba9386b07b1048f02d35781d5edbae9c"
+  },
+  "source_sha256": {
+    "historical_sql_manifest": "b442f671d5f24ad9886f308f80aa904de233784ba6cc772b702c3b9f09ee138b",
+    "v3_sql": "29d2a1696abb3f71c7d6ad08c9e7c9186898016d5d68254e9de2e81f17ea5b44"
+  },
+  "provenance": "Independently reproduced from unchanged source migrations in clean, disposable PostgreSQL clusters. Never exported from a database being upgraded. Different provider/owner/ACL profiles require a separately reviewed versioned manifest; do not replace hashes with observed live values."
+}
