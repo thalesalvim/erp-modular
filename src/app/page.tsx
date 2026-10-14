@@ -66,6 +66,8 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { roleLabel } from '@/lib/auth/authorization';
 import { updateOwnEmail, updateOwnPassword } from '@/lib/auth/authService';
 import { groupVisibleNavigation } from '@/lib/navigation/groups';
+import { CustomerSelect } from '@/components/customers/CustomerSelect';
+import { useCustomerOptions } from '@/components/customers/useCustomerOptions';
 
 function sanitizeInput(input: string): string {
   if (typeof input !== "string") return "";
@@ -131,6 +133,7 @@ interface EmployeeIdentity {
 
 export default function Home() {
   const auth = useAuth();
+  const customerOptions = useCustomerOptions(auth.user?.id, auth.selectedMembership);
   const [isMounted, setIsMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -730,6 +733,8 @@ export default function Home() {
     return true;
   });
 
+  const customerSelectionAllowed = Boolean(auth.selectedMembership && currentCompany?.id === auth.selectedMembership.tenant_id && activeUserEmail === auth.user?.email && activeUserRole === roleLabel(auth.selectedMembership.role)) && visibleTabs.some((tab) => tab.id === "customers") && isModuleAllowedForCurrentPlan("customers");
+
   const getTabLabelInPortuguese = (tabId: string) => {
     switch (tabId) {
       case "dashboard": return "Dashboard Geral";
@@ -831,6 +836,10 @@ export default function Home() {
                 </div>
               </section>
             ))}
+            <section aria-labelledby="navigation-help" className="mb-3">
+              <h2 id="navigation-help" className="mb-1 px-3 text-[10px] uppercase tracking-wider font-bold text-slate-400">Ajuda</h2>
+              <Link href="/sobre" prefetch={false} className="flex min-h-11 items-center rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-pink-400">Sobre Nós</Link>
+            </section>
           </nav>
         </div>
 
@@ -862,10 +871,10 @@ export default function Home() {
 
           <div className="shrink-0 flex items-center gap-2">
             {activeTab === "calendar" && (
-              <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Agendamento</span><span className="sm:hidden">Novo</span></button>
+              <button onClick={() => { setEditingId(null); setApptClientName(""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Agendamento</span><span className="sm:hidden">Novo</span></button>
             )}
             {activeTab === "atendimentos" && (
-              <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("atendimentos"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Lançar Atendimento</span><span className="sm:hidden">Lançar</span></button>
+              <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("atendimentos"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Lançar Atendimento</span><span className="sm:hidden">Lançar</span></button>
             )}
             {activeTab === "pos" && (
               <button onClick={() => { if (availableStockForSale.length === 0) { alert("Sem produtos cadastrados."); return; } const firstP = availableStockForSale[0]; setEditingId(null); setSaleProductName(firstP.name); setSaleUnitPrice(firstP.price); setSaleQuantity(1); setSaleClientName(customers[0]?.name || ""); setSalePaymentMethod("Pix"); setModalType("vendas"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">+ Nova Venda</span><span className="sm:hidden">Venda</span></button>
@@ -1054,7 +1063,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden ${cardBgClass}`}>
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <h3 className="font-bold text-slate-900 text-sm">Agenda de Atendimentos</h3>
-                      <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
+                      <button onClick={() => { setEditingId(null); setApptClientName(""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow cursor-pointer`}>+ Novo Agendamento</button>
                     </div>
                     {filteredAppointments.length === 0 ? (
                       <div className="p-12 text-center opacity-60 text-xs">Nenhum agendamento marcado.</div>
@@ -1102,7 +1111,7 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <div className="flex justify-between items-center border-b pb-3">
                       <h3 className="font-bold text-base">Atendimentos Realizados</h3>
-                      <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(customers[0]?.name || ""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("atendimentos"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Lançar Atendimento</button>
+                      <button onClick={() => { setEditingId(null); setFormDate(new Date().toISOString().split("T")[0]); setTempTime("10:00"); setFormClientName(""); setFormServiceName(services[0]?.name || ""); setFormProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setFormGrossValue(services[0]?.price || 50); setFormPaymentMethod("Pix"); setFormNotes(""); setModalType("atendimentos"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Lançar Atendimento</button>
                     </div>
                     <div className="divide-y divide-slate-100 text-xs">
                       {filteredAttendances.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum atendimento registrado.</p> : filteredAttendances.map((a: any) => <div key={a.id} className="py-2.5 flex justify-between items-center"><div><strong>{a.clientName}</strong> - {a.serviceName} ({a.professionalName}) • <span className="font-bold">R$ {Number(a.netValue).toFixed(2)} ({a.paymentMethod})</span> {a.notes ? <span className="opacity-60 italic">[{a.notes}]</span> : ""}</div><div className="flex items-center gap-2"><button onClick={() => { setEditingId(a.id); setFormDate(a.date); setTempTime(a.time || "10:00"); setFormClientName(a.clientName); setFormServiceName(a.serviceName); setFormProfessionalName(a.professionalName); setFormGrossValue(a.netValue); setFormPaymentMethod(a.paymentMethod || "Pix"); setFormNotes(a.notes || ""); setModalType("atendimentos"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir atendimento?")) return; recordSystemLog(`Excluiu atendimento de ${a.clientName}`); const updated = attendances.filter(item => item.id !== a.id); setAttendances(updated); saveTenantData("attendances", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
@@ -2325,7 +2334,7 @@ export default function Home() {
               }
               setIsApptModalOpen(false);
             }} className="space-y-3">
-              <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={apptClientName} onChange={e => setApptClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+              <CustomerSelect choices={customerOptions.choices} status={customerSelectionAllowed ? customerOptions.status : "restricted"} currentName={apptClientName} onChange={setApptClientName} />
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1">Serviço *</label>
@@ -2729,7 +2738,7 @@ export default function Home() {
                 }
                 setModalType(null);
               }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Cliente *</label><input required value={formClientName} onChange={e => setFormClientName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
+                <CustomerSelect choices={customerOptions.choices} status={customerSelectionAllowed ? customerOptions.status : "restricted"} currentName={formClientName} onChange={setFormClientName} />
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="font-bold block mb-1">Serviço</label><select value={formServiceName} onChange={e => { setFormServiceName(e.target.value); const s = services.find(srv => srv.name === e.target.value); if (s) setFormGrossValue(s.price); }} className="w-full border p-2.5 rounded-xl bg-white">{services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}</select></div>
                   <div>
@@ -2768,7 +2777,8 @@ export default function Home() {
           <div className="bg-white rounded-3xl w-full max-w-2xl p-6 shadow-2xl space-y-4 text-xs text-slate-800">
             <div className="border-b pb-3 flex justify-between items-center"><h2 className="text-base font-bold">Escala de {selectedEmpForSchedule.name}</h2><button onClick={() => setSelectedEmpForSchedule(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button></div>
             <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto pr-1">
-              {selectedEmpForSchedule.schedule?.map((day: EmployeeSchedule) => (
+              {(!Array.isArray(selectedEmpForSchedule.schedule) || selectedEmpForSchedule.schedule.length === 0) && <p role="status" className="rounded-xl bg-amber-50 p-4 text-amber-900">Nenhuma jornada cadastrada para este colaborador. A configuração de jornadas, folgas e intervalos ainda está em preparação.</p>}
+              {(Array.isArray(selectedEmpForSchedule.schedule) ? selectedEmpForSchedule.schedule : []).map((day: EmployeeSchedule) => (
                 <div key={day.dayIndex} className="py-3 flex items-center justify-between gap-3">
                   <div className="w-32 flex items-center gap-2">
                     <button type="button" onClick={() => { const up = selectedEmpForSchedule.schedule.map((d: EmployeeSchedule) => d.dayIndex === day.dayIndex ? { ...d, isWorking: !d.isWorking } : d); const empUp = { ...selectedEmpForSchedule, schedule: up }; setSelectedEmpForSchedule(empUp); const list = employees.map(e => e.id === empUp.id ? empUp : e); setEmployees(list); saveTenantData("employees", list); }} className={`px-2.5 py-1 rounded-lg font-bold border text-[11px] cursor-pointer ${day.isWorking ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500"}`}>{day.isWorking ? "Trabalha" : "Folga"}</button>

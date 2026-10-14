@@ -6,11 +6,13 @@
 
 **Branch auditada:** `fix/convites-autorizacao-atomica`.
 
-**Referência do código:** `700c93c5e9976b90b6062d1d6864a197b02372dc`.
+**Referência original:** `700c93c5e9976b90b6062d1d6864a197b02372dc`.
 
-**Escopo aprovado:** as 26 melhorias enumeradas pelo proprietário nesta consolidação.
+**Retomada do proprietário:** HEAD `95eeed5` mais alterações locais de interface; aprovação visual de Dashboard Geral, funções e organização dos módulos.
 
-Este documento registra decisões funcionais, diagnóstico do código e propostas de execução. Não implementa funcionalidades nem autoriza operações em produção. Foi criado para posterior versionamento; nesta tarefa não houve staging, commit, push, PR, deploy ou alteração de banco.
+**Escopo aprovado:** 26 melhorias originais preservadas e cinco novas capacidades registradas na retomada: **31 IDs**, sem duplicar as 14 observações.
+
+Este documento registra decisões funcionais, diagnóstico do código e propostas de execução. Não implementa funcionalidades nem autoriza operações em produção. A versão inicial foi publicada em 95eeed5. A atualização foi validada localmente antes da autorização posterior para consolidar e publicar os dois lotes de interface. Isso não autoriza PR, deploy ou alteração de banco empresarial.
 
 ## 1. Decisões prevalecentes e limites
 
@@ -27,7 +29,7 @@ Detalhes operacionais não definidos são registrados como decisões pendentes. 
 
 ## 2. Método, evidências e significado dos estados
 
-Esta revisão foi uma inspeção estática de `src/`, migrations, contratos e documentação/testes versionados. Não executou suíte funcional, Docker, browser, SMTP, Auth ou PostgREST nesta tarefa; não consultou ambientes hospedados nem arquivos de credenciais. A auditoria visual da tarefa anterior é contexto complementar, não uma nova validação.
+A auditoria original foi uma inspeção estática de `src/`, migrations, contratos e documentação/testes versionados, sem execução de testes ou serviços naquele levantamento. A retomada descrita na seção 10 acrescenta inspeção do estado local, testes controlados e navegação com contas sintéticas; resultados atuais e limites são registrados separadamente.
 
 | Estado | Significado nesta consolidação |
 | --- | --- |
@@ -36,7 +38,7 @@ Esta revisão foi uma inspeção estática de `src/`, migrations, contratos e do
 | Ausente | O mecanismo específico aprovado não foi encontrado no código versionado examinado. Exemplos e rascunhos não contam como implementação. |
 | Não verificado | A conclusão exige ensaio específico não realizado; a inspeção estática não prova correção ou ausência do defeito. |
 
-**Resultado: 26 melhorias; 0 implementadas integralmente, 14 parciais, 11 ausentes e 1 não verificada.** Isso não significa ausência de trabalho: a fundação SQL e diversas telas existem. Significa que nenhuma das 26 regras completas recebe aprovação de ponta a ponta nesta auditoria.
+**Resultado atualizado: 31 melhorias; 1 implementada no seu escopo, 17 parciais e 13 ausentes.** A contagem distingue implementação local de certificação hospedada. Somente HH-26 está completo como conteúdo/links; componentes visuais aprovados não certificam os fluxos empresariais.
 
 Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiável; **P1** regras funcionais dependentes dessas bases; **P2** experiência e ajustes independentes; **P3** instalação PWA após revisão do cache e da sessão. Prioridade não autoriza execução.
 
@@ -80,13 +82,18 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 | HH-17 | Colaborador provisório por até 24 horas | Ausente | P1 |
 | HH-18 | Bloqueio e revogação seguros | Parcial | P0 |
 | HH-19 | Substituição progressiva de `tenant_data` | Parcial | P0 |
-| HH-20 | Mostrar/ocultar senha | Ausente | P2 |
-| HH-21 | Rolagem de Meus Planos no modo claro | Não verificado | P2 |
+| HH-20 | Mostrar/ocultar senha | Parcial | P2 |
+| HH-21 | Rolagem de Meus Planos no modo claro | Parcial | P2 |
 | HH-22 | Responsividade celular/tablet/desktop | Parcial | P2 |
 | HH-23 | PWA instalável | Ausente | P3 |
 | HH-24 | Menu por categorias | Parcial | P2 |
-| HH-25 | Sobre Nós e instruções de instalação | Ausente | P2 |
-| HH-26 | Contatos oficiais | Ausente | P2 |
+| HH-25 | Sobre Nós e instruções de instalação | Parcial | P2 |
+| HH-26 | Contatos oficiais | Implementado | P2 |
+| HH-27 | Produtos consumidos na finalização, baixa e custo transacionais | Ausente | P0 |
+| HH-28 | Catálogo persistente de categorias de serviços | Ausente | P1 |
+| HH-29 | Estoque negativo e regularização em 24 horas | Ausente | P0 |
+| HH-30 | Calculadoras financeiras com regras comerciais aprovadas | Ausente | P1 |
+| HH-31 | Orçamentos de serviços e vendas | Ausente | P1 |
 
 ## 4. Regras, evidências e aceitação por melhoria
 
@@ -102,7 +109,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 
 ### HH-02 — Clientes titulares
 
-- **Regra:** nome completo, CPF, nascimento e telefone obrigatórios para titulares; cadastro inteligente auxilia preenchimento sem inventar dados nem substituir consentimento/validação.
+- **Regra:** nome completo, CPF válido, nascimento e telefone obrigatórios para titulares; cadastro inteligente auxilia preenchimento sem inventar dados nem substituir consentimento/validação.
 - **Estado/evidência:** **Parcial**. [Home](../src/app/page.tsx), linhas 2561–2580, salva `name`, `phone`, `notes`; [Equipe](../src/app/equipe/page.tsx), linha 2287, faz o mesmo. `erp_customers`/`erp_customer_contacts` no [modelo normalizado](../supabase/migrations/20261010060100_erp_domains.sql), linhas 3–27, não possuem CPF/nascimento.
 - **Módulos/dependências:** clientes, agenda, atendimentos; HH-19, contrato de titular/dependente e HH-03. Não acrescentar integração de consulta externa não aprovada.
 - **Segurança/dados:** campos identificadores separados de projeções operacionais mínimas; logs e caches não devem distribuir CPF/nascimento. Saneamento do legado precisa preservar registros incompletos.
@@ -283,7 +290,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-20 — Mostrar/ocultar senha
 
 - **Regra:** alternar visibilidade sem alterar o valor ou enviar o formulário.
-- **Estado/evidência:** **Ausente**. Login em [AuthEntry](../src/components/auth/AuthEntry.tsx), linha 63, e primeira senha/recuperação em [PasswordFlow](../src/components/auth/PasswordFlow.tsx), linhas 38–39, usam `type="password"` fixo; formulários de conta também não possuem alternância de visibilidade.
+- **Estado/evidência:** **Parcial**. O login de AuthEntry possui alternância acessível e testes/navegação do lote visual local aprovados. Ativação, recuperação e formulários de conta permanecem sem o controle; não generalizar aprovação do login para todos os campos.
 - **Módulos/dependências:** login, ativação, recuperação e conta; inventariar todos os campos, sem modificar autenticação.
 - **Segurança/dados:** manter oculto inicialmente; botão não registra senha, não persiste visibilidade em cache e tem `type="button"`/estado acessível.
 - **Aceitação:** mouse/teclado alternam cada campo, valor e foco são preservados, rótulo comunica estado; envio e autocomplete continuam corretos.
@@ -293,7 +300,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-21 — Rolagem de Meus Planos no modo claro
 
 - **Regra:** rolar e ler planos/consultorias no tema claro sem conteúdo cortado, contraste inadequado ou controles inacessíveis.
-- **Estado/evidência:** **Não verificado**. Há `overflow-y-auto` no conteúdo principal ([Home](../src/app/page.tsx), linha 865) e lista interna com fundo/limite de altura fixos, linha 1601; isso não comprova correção do defeito relatado. Não foi reproduzido neste levantamento.
+- **Estado/evidência:** **Parcial**. O defeito foi reproduzido e corrigido na Home: superfícies e rolagem seguem o tema explícito. O lote visual validou claro/escuro e teclado. Meus Planos na página Equipe e a matriz completa de zoom/listas ainda não foram certificados.
 - **Módulos/dependências:** Meus Planos nas duas páginas, tema e HH-22; reprodução com viewport e conteúdo definidos.
 - **Segurança/dados:** ajuste CSS deve preservar botões e condições de acesso; não alterar pagamento/contrato para corrigir rolagem.
 - **Aceitação:** reproduzir antes; alcançar último cartão/ação por toque, roda e teclado no claro e escuro; não criar rolagem horizontal indevida ou sobreposição de modal.
@@ -303,7 +310,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-22 — Responsividade
 
 - **Regra:** utilizar o sistema em celular, tablet e desktop com navegação e formulários acessíveis.
-- **Estado/evidência:** **Parcial**. Home possui menu móvel, `p-4 lg:p-8` e grids responsivos; Equipe mantém `p-8` no corpo, linha 804, e vários modais não limitam altura/rolagem. Breakpoints no código não certificam a experiência em dispositivos.
+- **Estado/evidência:** **Parcial**. O lote visual corrigiu cabeçalho/menu e equipe na Home, incluindo larguras 320/390/768/900/1280 px nos casos registrados. Outras telas, listas extensas, teclado virtual e aparelhos físicos continuam pendentes.
 - **Módulos/dependências:** layout, Home, Equipe, Master e Auth; catálogo de componentes compartilhados e matriz de viewports.
 - **Segurança/dados:** não esconder mensagens de erro, consentimento ou ações de saída/revogação; reorganizar layout sem relaxar autorização.
 - **Aceitação:** páginas e modais principais operáveis em celular/tablet/desktop, retrato/paisagem; sem cortes e ações inacessíveis; teclado virtual, zoom e foco não bloqueiam o fluxo.
@@ -323,7 +330,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-24 — Menu por categorias
 
 - **Regra:** agrupar módulos existentes em categorias compreensíveis, preservando acesso por perfil/plano.
-- **Estado/evidência:** **Parcial**. Menu existe, mas `allTabs` é lista plana ([Home](../src/app/page.tsx), linhas 687–701; Equipe, linhas 663–677). Não há agrupamento por categorias.
+- **Estado/evidência:** **Parcial**. A Home agrupa apenas visibleTabs já filtradas, com fechamento/foco acessíveis; o proprietário aprovou a organização visual. Equipe ainda mantém a navegação duplicada legada; categorias não concedem acesso.
 - **Módulos/dependências:** navegação das duas páginas e HH-22; rótulos/grupos propostos devem receber revisão do produto.
 - **Segurança/dados:** categoria visível não concede permissão; links não podem expor módulo proibido nem criar rota de bypass.
 - **Aceitação:** todos os módulos existentes continuam acessíveis aos mesmos perfis; categoria vazia não aparece; localização atual é clara; teclado/menu móvel funcionam.
@@ -333,7 +340,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-25 — Sobre Nós e instalação
 
 - **Regra:** página Sobre Nós com instruções reais de instalação e contatos oficiais.
-- **Estado/evidência:** **Ausente**. Inventário de `src/app/` contém Home, Equipe, Master e páginas Auth; nenhuma página Sobre Nós. Não há instruções PWA verificadas no frontend.
+- **Estado/evidência:** **Parcial**. A página pública /sobre e o link Ajuda foram implementados localmente nesta retomada, com informações e instruções oficiais de atalho. Instalação em aparelhos e PWA completo dependem de HH-23, ainda não certificado.
 - **Módulos/dependências:** conteúdo institucional, navegação, HH-26 e HH-23 para instruções finais de instalação.
 - **Segurança/dados:** conteúdo público não deve incluir fixtures, credenciais ou contatos pessoais herdados; não divulgar suporte/recursos não existentes.
 - **Aceitação:** página acessível no fluxo aprovado, texto revisado e contatos corretos; instruções distinguem plataformas suportadas e só prometem instalação efetivamente disponível.
@@ -343,12 +350,63 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-26 — Contatos oficiais
 
 - **Regra:** exibir **+55 37 9855-8658** e **adm.handyhub@gmail.com** nos pontos institucionais/de suporte aprovados.
-- **Estado/evidência:** **Ausente**. Busca desses valores em `src/` não encontrou uso. Exemplos de usuários/empresas em [configuração](../src/config/modules.ts) e [saasConfig](../src/lib/saasConfig.ts) não são os contatos oficiais do produto.
+- **Estado/evidência:** **Implementado** no escopo de conteúdo/links: /sobre apresenta o WhatsApp +55 37 9855-8658 e o e-mail adm.handyhub@gmail.com; exibição/links são verificados sem envio automático. Isso não afirma entrega ou disponibilidade operacional do suporte.
 - **Módulos/dependências:** HH-25, suporte e Meus Planos quando aplicável; fonte única de contatos e revisão dos pontos de exposição.
 - **Segurança/dados:** separar suporte HandyHub dos contatos de cada tenant; nenhum envio de mensagem automática está autorizado por essa inclusão.
 - **Aceitação:** número/e-mail iguais em todos os pontos aprovados; links `tel:`/`mailto:` corretos; eventual link WhatsApp usa número internacional completo e abre somente por ação do usuário.
 - **Testes:** consistência de conteúdo, URLs e clique sem despacho automático; ausência de substituição dos contatos dos clientes/empresas.
 - **Prioridade:** **P2**, lote independente de dados e serviços.
+
+### HH-27 — Produtos consumidos na finalização do atendimento
+
+- **Regra aprovada:** registrar produtos e quantidades consumidos ao finalizar, baixar estoque e apurar o custo dentro da mesma transação.
+- **Estado/evidência:** **Ausente**. A finalização em Home cria atendimento e marca agendamento como atendido em coleções JSON; não registra itens consumidos nem movimentações correspondentes. O modelo erp_attendances/erp_attendance_finance não contém o comando completo dessa operação.
+- **Módulos/dependências:** HH-11/12/14/19, inventário por produto/tenant, custo histórico e comando de finalização revisado; instalação gerenciada permanece bloqueada.
+- **Segurança/dados:** autoria, permissão do responsável, locks ordenados, idempotência e auditoria no servidor. Não substituir CMV histórico pelo custo atual nem fazer baixas separadas no frontend.
+- **Aceitação:** itens e quantidades válidos; efeito único em atendimento/estoque/custo; falha desfaz todos os efeitos; custo e identidade originais continuam explicáveis.
+- **Testes:** consumo múltiplo, quantidade inválida, produto de outro tenant, estoque concorrente, reenvio e rollback tardio.
+- **Prioridade:** **P0**. Política de custeio e estorno dependem de HH-14.
+
+### HH-28 — Catálogo de categorias de serviços
+
+- **Regra aprovada:** cadastrar categorias em botão/modal e selecioná-las nos serviços, sem digitação livre como contrato final.
+- **Estado/evidência:** **Ausente**. Home e Equipe persistem category como texto; erp_services também usa texto. Não há catálogo com identidade, comando de criação ou contrato seguro de persistência. Modal fictício não será criado.
+- **Módulos/dependências:** serviços, HH-16/19, catálogo por tenant, migration aditiva e compatibilidade com categorias antigas.
+- **Segurança/dados:** definir perfis de gestão, RLS e unicidade; não mudar serviços/históricos ao renomear categoria sem regra revisada.
+- **Aceitação:** criar e selecionar categoria persistente após recarga; duplicidade concorrente tratada; categoria estrangeira recusada; valores legados preservados no upgrade.
+- **Testes:** CRUD autorizado/negado, homônimos entre tenants, concorrência e recuperação após falha.
+- **Prioridade:** **P1**. Comportamento de renomeação/exclusão e normalização ainda precisa de definição.
+
+### HH-29 — Estoque negativo com janela de regularização de 24 horas
+
+- **Regra aprovada:** permitir venda que deixe saldo negativo, avisar e impedir novas vendas do item após 24 horas sem regularização.
+- **Estado/evidência:** **Ausente**. Home recusa saldo menor que quantidade imediatamente, por comparação em memória; não existe relógio de déficit ou bloqueio persistente. O comando SQL de produto atual não implementa venda/consumo com essa janela.
+- **Módulos/dependências:** vendas, estoque, HH-14/16/19 e HH-27; comandos e ledger transacionais certificados.
+- **Segurança/dados:** relógio do servidor e revalidação depois de locks; toda decisão vinculada ao produto e tenant. Não abrir escrita direta nem remover constraints históricas para contornar o bloqueio.
+- **Contrato técnico proposto, pendente de ratificação:** iniciar a janela no commit da primeira transição de saldo não negativo para negativo; enquanto o déficit permanecer, vendas/reposições parciais não reiniciam o relógio. No instante igual ou posterior a início + 24 h, recusar operações que ampliem o déficit. Desbloqueio somente após regularização efetiva para saldo não negativo, com evento auditado; nova queda posterior inicia outro episódio.
+- **Aceitação/testes:** aviso na primeira queda, fronteiras antes/exatamente/depois de 24 h, edição de venda que aumente quantidade, reposição parcial/integral, estorno, duas vendas/reposição concorrentes e rollback. Definir como operações anteriores/estornos participam do saldo sem apagar histórico.
+- **Prioridade:** **P0**; a nova política não está habilitada por este documento.
+
+### HH-30 — Calculadoras financeiras de juros e descontos
+
+- **Regra aprovada:** calculadoras de cobrança e desconto conforme regras comerciais aprovadas; não inventar fórmulas.
+- **Estado/evidência:** **Ausente**. Não foi encontrado contrato de cálculo ou tela correspondente em src/docs versionados. Busca no histórico de mensagens de commits por juros não recuperou especificação. Fórmula comercial permanece **pendente de definição**.
+- **Módulos/dependências:** financeiro, HH-14/16/19; principal/base, unidade da taxa, regime, período, vencimento, arredondamento e permissões precisam de especificação do proprietário.
+- **Segurança/dados:** não mudar saldo, preço ou obrigação por cálculo do navegador; eventual confirmação financeira exige comando idempotente, transação e trilha de auditoria.
+- **Aceitação:** exemplos numéricos aprovados e reproduzíveis para cada calculadora, precisão definida, entradas inválidas recusadas e distinção entre simulação e registro financeiro.
+- **Testes:** vetores comerciais revisados, limites/precisão, negativas/NaN/Infinity, arredondamento e integração autorizada se houver persistência.
+- **Prioridade:** **P1**, bloqueada pela ausência de regras comerciais.
+
+### HH-31 — Orçamentos de serviços e vendas
+
+- **Regra aprovada:** recuperar e especificar o fluxo de orçamentos anteriormente planejado.
+- **Estado/evidência:** **Ausente**. Inspeção de src/docs/drafts e busca em mensagens do histórico Git não recuperaram regras de orçamento. Não foi encontrado módulo ou comando persistente específico.
+- **Módulos/dependências:** serviços/vendas, clientes, HH-02/07/08/13/14/16/19; vínculo da pessoa, itens, preços, validade, estados, aprovação, conversão e cancelamento permanecem **pendentes de definição**.
+- **Segurança/dados:** não reservar estoque, gerar cobrança ou alterar agenda implicitamente. Futuras conversões precisam de snapshot, idempotência, permissão e tenant verificados.
+- **Aceitação:** fluxo e exemplos aprovados antes de implementação; orçamento real sobrevive à recarga; revisão e conversão não duplicam efeitos nem alteram valores históricos silenciosamente.
+- **Testes:** regras aprovadas de transição, expiração, reenvio, tenant/cargo, concorrência e rollback.
+- **Prioridade:** **P1**, bloqueada pela especificação não recuperada.
+
 
 ## 5. Roadmap proposto: lotes pequenos com gates
 
@@ -429,7 +487,7 @@ Entrega esperada do lote: um fluxo de leitura reproduzível e seguro, critérios
 
 Alternativa visual independente, se priorizada pelo proprietário: V1, mostrando/ocultando senha e centralizando os dois contatos oficiais, sem alterar autenticação ou dados. Essa alternativa não substitui as prioridades de segurança e integridade.
 
-## 9. Controle desta consolidação
+## 9. Registro histórico da consolidação original (95eeed5)
 
 - O único arquivo criado no projeto é `docs/BACKLOG-HANDYHUB.md`.
 - Os 22 arquivos não rastreados preexistentes, evidências, backups e rascunhos foram preservados.
@@ -437,3 +495,38 @@ Alternativa visual independente, se priorizada pelo proprietário: V1, mostrando
 - As verificações desta tarefa são de conteúdo/preservação do documento e do repositório, não aprovação funcional das melhorias.
 - Não houve acesso a banco remoto, alteração de ambiente, execução de serviço de envio, migration, commit, push, PR ou deploy.
 - Este backlog mantém 26 IDs estáveis. Pendências técnicas e lotes são decomposição dessas melhorias, não funcionalidades adicionais aprovadas.
+
+## 10. Retomada após avaliação do proprietário — 14/10/2026
+
+**Aprovação visual registrada:** Dashboard Geral, cadastro de funções e arquitetura visual/organização dos módulos. Essa aprovação não certifica persistência, regras financeiras, autorização SQL ou conclusão da Fase 2A.
+
+Os 26 IDs anteriores foram preservados. As 14 observações se distribuem por esses IDs e **cinco capacidades novas**, HH-27 a HH-31; não foram criados 14 requisitos duplicados.
+
+| Observação | IDs | Causa verificável / estado | Dependências e validação segura |
+| --- | --- | --- | --- |
+| 1. Colaboradores e convites | HH-17/18 | Integração bloqueada. api/team/invite/route.ts exige AUTH_INVITE_TEMPLATE_MODE=token_hash antes de criar autorização ou enviar; o preview não recebe essa flag nem chave administrativa. Na Home o e-mail ainda é opcional para cadastro operacional sem acesso Auth; não confundir esse caminho com convite válido. | v3–v5/RPCs e perfil gerenciado; SMTP/template/origem/restrições atuais precisam de auditoria somente leitura. camada-1c-retomada documenta entregas reais anteriores, portanto “SMTP ausente” não está comprovado hoje. Não ativar flag nem enviar e-mail neste lote. |
+| 2. Escala vazia | HH-07 | Interface e dados: selectedEmpForSchedule.schedule?.map não produz linhas quando schedule falta/está vazio; os defaults só são atribuídos a novos colaboradores. Há dados sintéticos antigos sem escala. Mensagem de ausência acrescentada; configuração completa BLOQUEADA. | Jornada, folgas, intervalos e disponibilidade ainda sem contrato completo. Estruturas normalizadas fechadas e HH-16/19; não inventar horários nem gravar defaults em registros existentes. Testar futuro upgrade, intervalos, autorização e concorrência local. |
+| 3. Clientes obrigatórios | HH-02/03/04 | Regra incompleta: formulário guarda name/phone/notes; CPF e nascimento ausentes no agregado e nas relações atuais. | Exigir nome completo, CPF válido, data de nascimento válida e telefone para titulares. Preservar dependentes, duplicidade por perfil e saneamento de dados antigos. UI sozinha não corrige contrato; testes locais de validação/tenant, depois comandos novos. |
+| 4. Seletor da agenda | HH-02/11 | Interface transicional implementada na Home; nomes continuam sendo o contrato de escrita legado. Seleção ambígua é recusada na interface. Novos formulários não pré-selecionam nomes do cache; nomes não confirmados não são repetidos nos avisos. | Fonte somente leitura, confirmada novamente na nuvem existente sem cache de fallback, vinculada à identidade/membership atual. Não equivale à associação segura por UUID normalizado; Equipe permanece pendente. Testes de opções/vazio/erro/homônimos e troca de identidade, sem submissões hospedadas. |
+| 5. Conflitos/qualificação | HH-07/08 | Regra ausente: agenda compara apenas mesma data/hora/nome em memória; não considera intervalo de duração, disponibilidade ou função do serviço. | Comando normalizado com revalidação e locks, versão, qualificação por UUID e fuso definido. Ensaios multi-backend locais; nada habilitado em staging. |
+| 6. Atendimento a partir da agenda | HH-02/11 | Seleção de cliente acrescentada à Home; listagem/seleção de agendamentos ainda falta. Finalizar já copia alguns nomes/dados e altera duas coleções, sem transação. | Conversão idempotente agendamento→atendimento, autorização responsável e histórico. Backend normalizado e HH-12/19; não substituir a agenda gerencial pela projeção própria limitada. |
+| 7. Produtos consumidos | HH-27 + HH-14/12 | Regra ausente: finalização não coleta itens/quantidades nem faz baixa ou CMV do consumo. | Não implementar baixa separada no frontend. Estoque/custo/finalização na mesma transação, custo histórico, idempotência/auditoria e rollback local. |
+| 8. Categorias | HH-28 | Contrato ausente: category é texto livre em serviços/produtos; não há catálogo seguro. Implementação BLOQUEADA. | Modelo/RPC/ACLs por tenant e regra de dados legados; modal apenas após persistência real certificada. |
+| 9. Fidelidade individual | HH-04 | Não há saldo/eventos de fidelidade ou vínculo de dependentes. | Preservar fidelidade de cada pessoa atendida, independente do responsável. Fórmula, prazo, resgate e ajustes não foram recuperados/aprovados neste levantamento; não os inventar. |
+| 10. Saldo negativo/24 h | HH-29 + HH-14 | Venda atual recusa déficit imediatamente em Home; não há incidente persistente nem expiração em servidor. | Contrato técnico proposto no HH-29 exige ratificação, command/ledger revisados e PostgreSQL descartável. Sem alteração de regra de venda neste lote. |
+| 11. Ultra não libera DRE | HH-14/16 | Causa comprovável: tenant normalizado contém planName; updateCompanyInMasterDb mistura campos e atualiza só plan_name. hasDREAccess prioriza planName antigo. Além disso, “Alterar Agora” não aguarda a gravação e pode mostrar sucesso antes do erro RLS. | Corrigir apenas em lote contratual de assinatura/autorização, com confirmação do servidor e testes de sucesso/negação. Não habilitar DRE por variável local nem contornar plano, RLS ou permissão. |
+| 12. Juros/desconto | HH-30 | Tela/contrato não encontrados; fórmulas comerciais não recuperadas. BLOQUEADO por definição. | Vetores numéricos e regras aprovadas; cálculos e registros distintos, precisão/idempotência/auditoria se houver efeitos financeiros. |
+| 13. Orçamentos | HH-31 | Planejamento detalhado não recuperado na árvore/documentação/histórico pesquisados. BLOQUEADO por definição. | Recuperar especificação com o proprietário; não criar estados, cobranças, reservas ou conversões fictícias. |
+| 14. Sobre Nós | HH-25/26 | Página pública /sobre, navegação Ajuda e contatos oficiais implementados. Instruções de atalho documentadas; PWA completo segue AUSENTE. | Página estática sem consultas empresariais ou mensagens automáticas. Guias oficiais Google/Apple consultados; teste de links sem envio, navegação desktop/móvel. Instalação em aparelho real ainda pendente. |
+
+### Sequência recomendada após este lote
+
+1. Revisar visualmente seleção de clientes, estados explícitos e Sobre Nós; preservar alterações locais sem commit.
+2. Contrato de jornadas/intervalos/qualificação e de identidade de clientes, com leitura autorizada mínima e saneamento somente em fixtures.
+3. Retomar desenho/certificação gerenciada v6 e plano de cutover, mantendo v1–v5 e o frontend legado fora de um reset automático.
+4. Implementar reservas atômicas/agenda→atendimento e consumo de produtos, com estoque/CMV auditados; só depois integrar escritas hospedadas autorizadas.
+5. Ratificar contrato de déficit/24 h e exemplos comerciais de juros, fidelidade e orçamentos, antes dos lotes respectivos.
+
+Os requisitos de notas HH-06, promoções com prazo real HH-13, downgrade no fim da vigência HH-15, permissões HH-16 e revogação HH-18 continuam obrigatórios e não foram substituídos.
+
+**Fontes de instruções de atalhos:** [Google Chrome](https://support.google.com/chrome/answer/15085120?co=GENIE.Platform%3DAndroid&hl=pt-BR), [Apple Safari](https://support.apple.com/pt-br/guide/iphone/iphea86e5236/ios). Instruções publicadas não constituem teste de instalação PWA do HandyHub.
