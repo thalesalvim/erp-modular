@@ -65,6 +65,7 @@ import { TenantAuthEntry } from '@/components/auth/AuthEntry';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { roleLabel } from '@/lib/auth/authorization';
 import { updateOwnEmail, updateOwnPassword } from '@/lib/auth/authService';
+import { groupVisibleNavigation } from '@/lib/navigation/groups';
 
 function sanitizeInput(input: string): string {
   if (typeof input !== "string") return "";
@@ -133,6 +134,15 @@ export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
+  const menuCloseRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    menuCloseRef.current?.focus();
+    const toggle = menuToggleRef.current;
+    return () => toggle?.focus();
+  }, [isMobileMenuOpen]);
 
   const [isTenantBlocked, setIsTenantBlocked] = useState(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
@@ -459,6 +469,7 @@ export default function Home() {
   }, [isLogged, activeUserEmail, currentCompany?.slug]);
 
   const handleLogout = async () => {
+    setIsMobileMenuOpen(false);
     recordSystemLog("Logout do sistema realizado");
     try {
       await auth.signOut();
@@ -696,7 +707,7 @@ export default function Home() {
     ...(isManager ? [{ id: "team", label: "Equipe de Colaboradores", icon: <Briefcase size={17} /> }] : []),
     { id: "customers", label: "Base de Clientes", icon: <UsersIcon size={17} /> },
     { id: "my_schedule", label: "Meu Banco de Horas & Funções", icon: <Clock size={17} /> },
-    { id: "dre", label: "Módulo DRE Gerencial", icon: <PieChart size={17} /> },
+    ...(isManager ? [{ id: "dre", label: "Módulo DRE Gerencial", icon: <PieChart size={17} /> }] : []),
     ...(isDono ? [{ id: "my_plan", label: "Meu Plano & Consultorias", icon: <Award size={17} /> }] : []),
     { id: "settings", label: "Configurações", icon: <SettingsIcon size={17} /> }
   ];
@@ -746,9 +757,14 @@ export default function Home() {
     return <TenantAuthEntry>{null}</TenantAuthEntry>;
   }
   return (
-    <div className={`flex h-screen font-sans ${bgClass} relative overflow-hidden`}>
+    <div className={`flex h-dvh font-sans ${bgClass} relative overflow-hidden`}>
       <div className="absolute top-3 left-4 z-30">
         <button
+          ref={menuToggleRef}
+          aria-label="Abrir menu de navegação"
+          aria-expanded={isMobileMenuOpen}
+          aria-controls="main-navigation"
+          hidden={isMobileMenuOpen}
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2.5 rounded-xl bg-slate-900 text-white shadow-lg border border-slate-700 flex items-center justify-center cursor-pointer hover:bg-slate-800 transition"
           title="Alternar Menu Lateral"
@@ -764,14 +780,24 @@ export default function Home() {
         />
       )}
 
-      <aside className={`w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl z-30 fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out ${
+      <aside id="main-navigation" aria-label="Menu de navegação" aria-hidden={!isMobileMenuOpen} inert={!isMobileMenuOpen} onKeyDown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); setIsMobileMenuOpen(false); }
+        if (event.key === 'Tab') {
+          const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button');
+          const first = buttons[0];
+          const last = buttons[buttons.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      }} className={`w-64 max-w-[calc(100vw-2rem)] bg-slate-900 text-white flex flex-col gap-3 p-4 shadow-xl z-30 fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out ${
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
-        <div>
-          <div className="mb-6 px-2 pt-2">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="mb-3 shrink-0 px-2 pt-2">
             <div className="flex items-center gap-2 font-bold text-lg mb-1">
               {renderCompanyLogo("w-6 h-6", 22)}
-              <span className="tracking-tight text-white truncate">{salonConfig.name}</span>
+              <span className="min-w-0 flex-1 tracking-tight text-white truncate">{salonConfig.name}</span>
+              <button ref={menuCloseRef} type="button" aria-label="Fechar menu de navegação" onClick={() => setIsMobileMenuOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-pink-400"><X size={20} aria-hidden="true" /></button>
             </div>
             
             <div className="flex items-center justify-between bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700/60 mt-2">
@@ -780,29 +806,35 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2 px-2">Menu Operacional</div>
-
-          <nav className="flex flex-col gap-1 overflow-y-auto max-h-[calc(100vh-270px)] pr-1">
-            {visibleTabs.map((tab: any) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setIsMobileMenuOpen(false);
-                }}
-                className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  activeTab === tab.id ? `${theme.activeBg} text-white shadow-md` : "text-slate-300 hover:bg-slate-800"
-                }`}
-              >
-                {tab.id === "dre" && !hasDREAccess ? <Lock size={15} className="text-amber-400" /> : tab.icon}
-                <span>{tab.label}</span>
-                {tab.id === "dre" && !hasDREAccess && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">Ultra</span>}
-              </button>
+          <nav aria-label="Módulos autorizados" data-theme="dark" className="app-scroll-area min-h-0 flex-1 overflow-y-auto pr-1">
+            {groupVisibleNavigation(visibleTabs).map((group) => (
+              <section key={group.id} aria-labelledby={`navigation-${group.id}`} className="mb-3">
+                <h2 id={`navigation-${group.id}`} className="mb-1 px-3 text-[10px] uppercase tracking-wider font-bold text-slate-400">{group.label}</h2>
+                <div className="flex flex-col gap-1">
+                  {group.tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      aria-current={activeTab === tab.id ? 'page' : undefined}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                        activeTab === tab.id ? `${theme.activeBg} text-white shadow-md` : "text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      {tab.id === "dre" && !hasDREAccess ? <Lock size={15} className="text-amber-400" /> : tab.icon}
+                      <span>{tab.label}</span>
+                      {tab.id === "dre" && !hasDREAccess && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">Ultra</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
           </nav>
         </div>
 
-        <div className="border-t border-slate-800 pt-3 px-2 flex items-center justify-between">
+        <div className="shrink-0 border-t border-slate-800 pt-3 px-2 flex items-center justify-between">
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold">Unidade:</p>
             <p className="text-xs font-bold text-pink-300 truncate max-w-[120px]">{salonConfig.name}</p>
@@ -820,15 +852,15 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden relative w-full">
-        <header className={`h-16 border-b px-4 lg:px-8 flex items-center justify-between shadow-sm ${headerBgClass}`}>
-          <div className="flex items-center gap-2 text-xs lg:text-sm opacity-80 pl-14">
-            <span className="font-semibold truncate max-w-[120px] lg:max-w-none">{salonConfig.name}</span>
-            <ChevronRight size={16} />
-            <span className="capitalize font-bold truncate max-w-[140px] lg:max-w-none">{getTabLabelInPortuguese(activeTab)}</span>
+      <main inert={isMobileMenuOpen} className="min-w-0 flex-1 flex flex-col overflow-hidden relative w-full">
+        <header className={`min-h-16 shrink-0 border-b px-4 lg:px-8 flex items-center justify-between gap-2 shadow-sm ${headerBgClass}`}>
+          <div className="min-w-0 flex items-center gap-2 text-xs lg:text-sm opacity-80 pl-14">
+            <span className="hidden sm:block min-w-0 font-semibold truncate max-w-[120px] lg:max-w-none">{salonConfig.name}</span>
+            <ChevronRight size={16} className="hidden sm:block shrink-0" />
+            <span className="min-w-0 capitalize font-bold truncate">{getTabLabelInPortuguese(activeTab)}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="shrink-0 flex items-center gap-2">
             {activeTab === "calendar" && (
               <button onClick={() => { setEditingId(null); setApptClientName(customers[0]?.name || ""); setApptServiceName(services[0]?.name || ""); setApptProfessionalName(isManager ? (employees[0]?.name || "") : activeUserName); setApptNotes(""); setApptHour("10"); setApptMinute("00"); setIsApptModalOpen(true); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Novo Agendamento</span><span className="sm:hidden">Novo</span></button>
             )}
@@ -846,7 +878,7 @@ export default function Home() {
             )}
             {activeTab === "team" && isManager && (
               <div className="flex items-center gap-2">
-                <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1 shadow cursor-pointer"><Briefcase size={14} /> <span className="hidden md:inline">Funções</span></button>
+                <button aria-label="Gerenciar funções da equipe" onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1 shadow cursor-pointer"><Briefcase size={14} /> <span className="hidden md:inline">Funções</span></button>
                 <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Colaborador</span><span className="sm:hidden">Equipe</span></button>
               </div>
             )}
@@ -862,7 +894,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8 pb-12">
+        <div data-theme={darkMode ? 'dark' : 'light'} className="app-scroll-area min-h-0 flex-1 overflow-y-auto p-4 lg:p-8 pb-12">
           {activeTab !== "settings" && activeTab !== "dre" && !isModuleAllowedForCurrentPlan(activeTab) ? (
             <div className="max-w-xl mx-auto my-16 p-8 bg-slate-900 border border-amber-500/30 rounded-3xl text-center space-y-4">
               <div className="inline-flex p-4 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
@@ -1186,15 +1218,15 @@ export default function Home() {
               {activeTab === "team" && isManager && (
                 <div className="max-w-6xl mx-auto space-y-6">
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
-                    <div className="flex justify-between items-center border-b pb-3">
+                    <div className="flex flex-col items-start sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
                       <h3 className="font-bold text-base">Equipe de Colaboradores</h3>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button onClick={() => setIsRolesModalOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow cursor-pointer">Gerenciar Funções</button>
                         <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setEmpRoles([rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole("Colaborador"); setModalType("colaborador"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Novo Colaborador</button>
                       </div>
                     </div>
                     <div className="divide-y divide-slate-100 text-xs">
-                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador cadastrado.</p> : employees.map(e => <div key={e.id} className="py-3 flex justify-between items-center"><div><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("colaborador"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {employees.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum colaborador cadastrado.</p> : employees.map(e => <div key={e.id} className="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><div className="min-w-0 break-words"><strong>{e.name}</strong> - Funções: <span className="text-indigo-600 font-bold">{(e.roles || [e.role || "Profissional Principal"]).join(", ")}</span> • Acesso: <span className="text-pink-600 font-bold">{e.systemRole || "Colaborador"}</span> ({e.phone})</div><div className="flex items-center gap-2"><button onClick={() => setSelectedEmpForSchedule(e)} className="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer">Configurar Escala</button><button onClick={() => { setEditingId(e.id); setFormName(e.name); setFormPhone(e.phone || ""); setEmpRoles(e.roles || [e.role || rolesList[0] || "Profissional Principal"]); setEmpEmail(""); setEmployeeInviteError(""); setEmpSystemRole(e.systemRole || "Colaborador"); setModalType("colaborador"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir colaborador?")) return; recordSystemLog(`Excluiu colaborador: ${e.name}`); const updated = employees.filter(item => item.id !== e.id); setEmployees(updated); saveTenantData("employees", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>
                   </div>
                 </div>
@@ -1598,7 +1630,7 @@ export default function Home() {
                                 </div>
                                 <p className="text-base font-black text-pink-600 mt-1">{p.price}</p>
                                 
-                                <div className="mt-3 space-y-1 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800 max-h-48 overflow-y-auto">
+                                <div tabIndex={0} role="region" aria-label={`Recursos do plano ${p.name}`} data-theme={darkMode ? 'dark' : 'light'} className={`plan-features mt-3 space-y-1 p-2.5 rounded-xl border max-h-48 overflow-y-auto focus-visible:outline-2 focus-visible:outline-pink-500 ${darkMode ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'}`}>
                                   {p.modules.map((mod, i) => (
                                     <p key={i} className="text-[11px] opacity-90">{mod}</p>
                                   ))}

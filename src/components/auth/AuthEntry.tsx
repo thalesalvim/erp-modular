@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { sendPasswordRecovery } from '@/lib/auth/authService';
 import { roleLabel } from '@/lib/auth/authorization';
@@ -24,6 +25,8 @@ export function AuthLoginForm() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const passwordId = useId();
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [recovery, setRecovery] = useState(false);
@@ -58,17 +61,22 @@ export function AuthLoginForm() {
           <input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white outline-none focus:border-indigo-500" />
         </label>
         {!recovery && (
-          <label className="block text-xs font-bold text-slate-300">
-            Senha
-            <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white outline-none focus:border-indigo-500" />
-          </label>
+          <div className="text-xs font-bold text-slate-300">
+            <label htmlFor={passwordId}>Senha</label>
+            <div className="relative mt-1">
+              <input id={passwordId} autoComplete="current-password" type={passwordVisible ? 'text' : 'password'} required value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-11 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 pr-14 text-white outline-none focus:border-indigo-500" />
+              <button type="button" aria-label={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={passwordVisible} aria-controls={passwordId} onClick={() => setPasswordVisible((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-300 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400">
+                {passwordVisible ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+              </button>
+            </div>
+          </div>
         )}
         {error && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-center text-xs font-bold text-rose-300">{error}</p>}
         {notice && <p role="status" className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-center text-xs font-bold text-emerald-300">{notice}</p>}
         <button disabled={pending} className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-black uppercase tracking-wide text-white hover:bg-indigo-500 disabled:opacity-50">
           {pending ? 'Aguarde…' : recovery ? 'Enviar link de recuperação' : 'Entrar'}
         </button>
-        <button type="button" onClick={() => { setRecovery((value) => !value); setError(''); setNotice(''); }} className="w-full text-xs font-bold text-indigo-300 hover:underline">
+        <button type="button" onClick={() => { setRecovery((value) => !value); setPasswordVisible(false); setError(''); setNotice(''); }} className="w-full text-xs font-bold text-indigo-300 hover:underline">
           {recovery ? 'Voltar ao login' : 'Esqueci minha senha'}
         </button>
       </form>
