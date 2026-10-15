@@ -3,3 +3,10 @@
 
 # Recovery seals hash SQL definitions; keep checkout bytes stable on Windows.
 *.sql text eol=lf
+
+# Managed v6/1 hashes these exact source bytes, including historical manifests.
+/scripts/managed_v6_release.py text eol=lf
+/scripts/test-managed-v6.py text eol=lf
+/supabase/recovery/reviewed-history-v4.json text eol=lf
+/supabase/recovery/reviewed-history-v5.json text eol=lf
+/tests/helpers/managed-v6-profile.json text eol=lf
