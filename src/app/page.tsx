@@ -1248,6 +1248,10 @@ export default function Home() {
                       <h3 className="font-bold text-base">Base de Clientes</h3>
                       <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("clientes"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Cadastrar Cliente</button>
                     </div>
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                      <p>O cadastro atual é legado e ainda não garante CPF, nascimento ou revisão de duplicidades.</p>
+                      <Link href="/clientes/cadastro-inteligente" prefetch={false} className="mt-2 inline-flex min-h-11 items-center font-bold text-indigo-800 underline">Preparar cadastro inteligente — sem salvar</Link>
+                    </div>
                     <div className="divide-y divide-slate-100 text-xs">
                       {customers.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum cliente cadastrado.</p> : customers.map(c => <div key={c.id} className="py-2.5 flex justify-between items-center"><span>{c.name} ({c.phone}) {c.notes ? <span className="opacity-60 italic">[{c.notes}]</span> : ""}</span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(c.id); setFormName(c.name); setFormPhone(c.phone || ""); setFormNotes(c.notes || ""); setModalType("clientes"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir cliente?")) return; recordSystemLog(`Excluiu cadastro do cliente: ${c.name}`); const updated = customers.filter(item => item.id !== c.id); setCustomers(updated); saveTenantData("customers", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
                     </div>

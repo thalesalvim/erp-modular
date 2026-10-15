@@ -110,6 +110,7 @@ Prioridades propostas: **P0** segurança e integridade que bloqueiam uso confiá
 ### HH-02 — Clientes titulares
 
 - **Regra:** nome completo, CPF válido, nascimento e telefone obrigatórios para titulares; cadastro inteligente auxilia preenchimento sem inventar dados nem substituir consentimento/validação.
+- **Etapa local 2 (sem publicação):** [preparação do cadastro](customer-registration-stage-1.md) em `/clientes/cadastro-inteligente` implementa campos, máscaras e validação em memória. Escrita, pesquisa de conflitos e revisão persistida continuam **BLOQUEADAS**; não muda o estado Parcial nem a consulta dos clientes antigos. Helpers testados são preparatórios, sem concessão de permissões ou uso do cache legado.
 - **Estado/evidência:** **Parcial**. [Home](../src/app/page.tsx), linhas 2561–2580, salva `name`, `phone`, `notes`; [Equipe](../src/app/equipe/page.tsx), linha 2287, faz o mesmo. `erp_customers`/`erp_customer_contacts` no [modelo normalizado](../supabase/migrations/20261010060100_erp_domains.sql), linhas 3–27, não possuem CPF/nascimento.
 - **Módulos/dependências:** clientes, agenda, atendimentos; HH-19, contrato de titular/dependente e HH-03. Não acrescentar integração de consulta externa não aprovada.
 - **Segurança/dados:** campos identificadores separados de projeções operacionais mínimas; logs e caches não devem distribuir CPF/nascimento. Saneamento do legado precisa preservar registros incompletos.
