@@ -1,7 +1,15 @@
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { updateSupabaseSession } from '@/lib/supabase/proxy';
 
 export async function proxy(request: NextRequest) {
+  // Block these routes before the shared session refresh can contact Auth.
+  let pathname = request.nextUrl.pathname;
+  try { pathname = decodeURIComponent(pathname); } catch { /* Invalid paths cannot enable the feature. */ }
+  pathname = pathname.replace(/\/+$/, '');
+  if ((pathname === '/meus-agendamentos' || pathname === '/api/agenda/own') &&
+      process.env.HANDYHUB_OWN_AGENDA_ENABLED !== 'true') {
+    return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+  }
   return updateSupabaseSession(request);
 }
 
