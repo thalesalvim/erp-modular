@@ -1,0 +1,12 @@
+{
+  "release_id": "managed-customer-notes-v6-3",
+  "lineage": "managed-v6-1-revision-2 -> managed-customer-pilot-v6-2-local -> managed-customer-notes-v6-3",
+  "hosted_certified": false,
+  "prior_root_sha256": "0968ea0d188ae411bfec94435b6580bb98898ca6966e61f027404eeecf070bf5",
+  "root_sha256": "035e0eaeb70f125387444dbe95436b9df49fea7efd901ea96bc7592d70949ab5",
+  "source_sha256": "18a8d2d35c4d613bb0f9bd71a0c296e32bad8a5c5273e3bfd7c9757a56e2d60e",
+  "provenance": "Two independently reconstructed owned PostgreSQL 17 managed-profile fixtures reproduced this metadata root. Both review DDL transactions rolled back before reference insertion; no target-state reseal or laboratory manifest override.",
+  "compatibility": "Four-field normalized fingerprints and immutable v6/2 receipts preserved. Explicit notes use a distinct fingerprint domain; omission preserves existing notes during update and defaults empty during create.",
+  "activation": "No hosted executor or activation. Explicit maintenance and all pilots disabled are installation prerequisites; installer leaves that state unchanged.",
+  "personal_data": "Private native columns, tenant RLS/ACLs and Owner RPCs. No protection claim against database administrators or readable backups. Synthetic local certification only."
+}

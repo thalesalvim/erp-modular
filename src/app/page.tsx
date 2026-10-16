@@ -68,6 +68,8 @@ import { updateOwnEmail, updateOwnPassword } from '@/lib/auth/authService';
 import { groupVisibleNavigation } from '@/lib/navigation/groups';
 import { CustomerSelect } from '@/components/customers/CustomerSelect';
 import { useCustomerOptions } from '@/components/customers/useCustomerOptions';
+import { useCustomerPersistence } from '@/lib/customers/persistence-client';
+import { CustomerModalForm } from '@/components/customers/CustomerModalForm';
 
 function sanitizeInput(input: string): string {
   if (typeof input !== "string") return "";
@@ -733,6 +735,23 @@ export default function Home() {
     return true;
   });
 
+  // Scope is a display boundary; SQL still authorizes every command independently.
+  const customerScope = !auth.loading && !auth.error && auth.user && auth.selectedMembership?.is_active &&
+    currentCompany?.id === auth.selectedMembership.tenant_id && activeUserEmail === auth.user.email &&
+    activeUserRole === roleLabel(auth.selectedMembership.role)
+    ? `${auth.user.id}/${auth.selectedMembership.tenant_id}/${auth.selectedMembership.role}` : null;
+  const customerPersistence = useCustomerPersistence(customerScope, auth.selectedMembership?.tenant_id, auth.selectedMembership?.role === 'owner');
+  const [customerDialog, setCustomerDialog] = useState<{ scope: string; id: string | null } | null>(null);
+  const openNewCustomer = () => {
+    if (!customerPersistence || !customerScope) return;
+    customerPersistence.startNew(); setEditingId(null);
+    setCustomerDialog({ scope: customerScope, id: null }); setModalType('clientes');
+  };
+  const openExistingCustomer = (id: string) => {
+    if (!customerPersistence || !customerScope) return;
+    setEditingId(id); setCustomerDialog({ scope: customerScope, id }); setModalType('clientes');
+  };
+
   const customerSelectionAllowed = Boolean(auth.selectedMembership && currentCompany?.id === auth.selectedMembership.tenant_id && activeUserEmail === auth.user?.email && activeUserRole === roleLabel(auth.selectedMembership.role)) && visibleTabs.some((tab) => tab.id === "customers") && isModuleAllowedForCurrentPlan("customers");
 
   const getTabLabelInPortuguese = (tabId: string) => {
@@ -898,7 +917,7 @@ export default function Home() {
               <button onClick={() => { setEditingId(null); setFormName(""); setFormAmount(100); setExpenseCategory("Operacional"); setExpenseIsRecurrent(false); setFormDate(new Date().toISOString().split("T")[0]); setModalType("despesas"); }} className="bg-rose-600 hover:bg-rose-700 text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer"><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Despesas</span><span className="sm:hidden">Despesa</span></button>
             )}
             {activeTab === "customers" && (
-              <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("clientes"); }} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Cliente</span><span className="sm:hidden">Cliente</span></button>
+              <button onClick={openNewCustomer} disabled={!customerPersistence} className={`${theme.buttonBg} text-white px-3 lg:px-4 py-2 rounded-xl text-[11px] lg:text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer`}><Plus size={15} /> <span className="hidden sm:inline">Cadastrar Cliente</span><span className="sm:hidden">Cliente</span></button>
             )}
           </div>
         </header>
@@ -1246,14 +1265,16 @@ export default function Home() {
                   <div className={`rounded-2xl border shadow-sm overflow-hidden p-6 space-y-4 ${cardBgClass}`}>
                     <div className="flex justify-between items-center border-b pb-3">
                       <h3 className="font-bold text-base">Base de Clientes</h3>
-                      <button onClick={() => { setEditingId(null); setFormName(""); setFormPhone(""); setFormNotes(""); setModalType("clientes"); }} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Cadastrar Cliente</button>
+                      <button onClick={openNewCustomer} disabled={!customerPersistence} className={`${theme.buttonBg} text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer`}>+ Cadastrar Cliente</button>
                     </div>
-                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                      <p>O cadastro atual é legado e ainda não garante CPF, nascimento ou revisão de duplicidades.</p>
-                      <Link href="/clientes/cadastro-inteligente" prefetch={false} className="mt-2 inline-flex min-h-11 items-center font-bold text-indigo-800 underline">Preparar cadastro inteligente — sem salvar</Link>
-                    </div>
+                    {!customerPersistence && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Cadastro por API indisponível neste ambiente ou para seu perfil. Nenhum cliente será gravado pelo sistema antigo.</p>}
                     <div className="divide-y divide-slate-100 text-xs">
-                      {customers.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum cliente cadastrado.</p> : customers.map(c => <div key={c.id} className="py-2.5 flex justify-between items-center"><span>{c.name} ({c.phone}) {c.notes ? <span className="opacity-60 italic">[{c.notes}]</span> : ""}</span><div className="flex items-center gap-2"><button onClick={() => { setEditingId(c.id); setFormName(c.name); setFormPhone(c.phone || ""); setFormNotes(c.notes || ""); setModalType("clientes"); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer" title="Editar"><Pencil size={14} /></button><button onClick={() => { if (!confirm("Excluir cliente?")) return; recordSystemLog(`Excluiu cadastro do cliente: ${c.name}`); const updated = customers.filter(item => item.id !== c.id); setCustomers(updated); saveTenantData("customers", updated); }} className="p-1.5 bg-slate-100 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer" title="Excluir"><Trash2 size={14} /></button></div></div>)}
+                      {!customerPersistence ? <p className="opacity-60 py-4 text-center">Ative o piloto autorizado para consultar os clientes.</p> : customerPersistence.items.length === 0 ? <p className="opacity-60 py-4 text-center">Nenhum cliente cadastrado.</p> : customerPersistence.items.map(c => (
+                        <div key={c.id} className="py-2.5 flex justify-between items-center gap-3">
+                          <span>{c.fullName}</span>
+                          <button type="button" onClick={() => openExistingCustomer(c.id)} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg cursor-pointer disabled:opacity-50" title="Editar cliente"><Pencil size={14} /></button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -2379,14 +2400,14 @@ export default function Home() {
         </div>
       )}
 
-      {modalType && (
+      {modalType && (modalType !== "clientes" || (customerDialog?.scope === customerScope && customerPersistence)) && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800">
+          <div role={modalType === "clientes" ? "dialog" : undefined} aria-modal={modalType === "clientes" ? true : undefined} aria-labelledby={modalType === "clientes" ? "customer-modal-title" : undefined} className={`bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-xs text-slate-800 ${modalType === "clientes" ? "max-h-[calc(100dvh-2rem)] overflow-y-auto" : ""}`}>
             <div className="border-b pb-3 flex justify-between items-center">
-              <h2 className="text-base font-bold capitalize">
+              <h2 id={modalType === "clientes" ? "customer-modal-title" : undefined} className="text-base font-bold capitalize">
                 {editingId ? `Editar ${modalType}` : `Cadastrar ${modalType}`}
               </h2>
-              <button onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
+              <button aria-label={modalType === "clientes" ? "Fechar cadastro de cliente" : "Fechar"} onClick={() => setModalType(null)} className="text-slate-400 font-bold text-base cursor-pointer">✕</button>
             </div>
 
             {modalType === "serviços" && (
@@ -2603,28 +2624,8 @@ export default function Home() {
               </form>
             )}
 
-            {modalType === "clientes" && (
-              <form onSubmit={e => {
-                e.preventDefault();
-                if (editingId) {
-                  const updated = customers.map(c => c.id === editingId ? { ...c, name: formName, phone: formPhone, notes: formNotes } : c);
-                  setCustomers(updated);
-                  saveTenantData("customers", updated);
-                  recordSystemLog(`Editou cliente: ${formName}`);
-                } else {
-                  const newC = { id: `c-${Date.now()}`, name: formName, phone: formPhone, notes: formNotes };
-                  const updated = [...customers, newC];
-                  setCustomers(updated);
-                  saveTenantData("customers", updated);
-                  recordSystemLog(`Cadastrou novo cliente: ${formName}`);
-                }
-                setModalType(null);
-              }} className="space-y-3">
-                <div><label className="font-bold block mb-1">Nome do Cliente *</label><input required placeholder="Nome do cliente" value={formName} onChange={e => setFormName(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">WhatsApp *</label><input required placeholder="(00) 00000-0000" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full border p-2.5 rounded-xl" /></div>
-                <div><label className="font-bold block mb-1">Observações</label><textarea rows={2} placeholder="Observações..." value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none" /></div>
-                <button type="submit" className={`w-full ${theme.buttonBg} text-white font-bold py-3 rounded-xl cursor-pointer`}>Salvar Cliente</button>
-              </form>
+            {modalType === "clientes" && customerDialog && customerPersistence && customerDialog.scope === customerScope && (
+              <CustomerModalForm key={`${customerDialog.scope}/${customerDialog.id ?? 'new'}`} persistence={customerPersistence} customerId={customerDialog.id} buttonClassName={theme.buttonBg} onSaved={() => setModalType(null)} />
             )}
 
             {modalType === "despesas" && (

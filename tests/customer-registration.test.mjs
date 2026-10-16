@@ -169,24 +169,16 @@ test('actual submit handler prevents navigation and emits only generic local err
     assert.equal(JSON.stringify(published).includes(draft.cpf), false);
   }
 });
-test('actual page boundary hides during auth failure and remounts draft on user, tenant or role change', () => {
-  let auth = { user: { id: 'u-a' }, selectedMembership: { tenant_id: 'a', role: 'owner', is_active: true }, loading: false, error: null };
-  const Marker = () => React.createElement('div', null, 'local preparation');
+test('retired standalone route redirects to Home without loading a form or customer data', () => {
+  let destination;
   const page = load('../src/app/clientes/cadastro-inteligente/page.tsx', {
-    '@/components/auth/AuthEntry': { TenantAuthEntry: ({ children }) => children },
-    '@/components/auth/AuthProvider': { useAuth: () => auth },
-    '@/lib/auth/authorization': { isTenantRole: role => ['owner', 'manager', 'employee'].includes(role) },
-    '@/components/customers/CustomerRegistrationPreparation': { CustomerRegistrationPreparation: Marker },
-    'next/link': { __esModule: true, default: ({ children }) => React.createElement('span', null, children) },
+    'next/navigation': { redirect: value => { destination = value; throw new Error('REDIRECT'); } },
   });
+  assert.throws(() => page.default(), /REDIRECT/);
+  assert.equal(destination, '/');
   assert.deepEqual(Object.keys(page), ['default']);
-  const CustomerPreparationBoundary = page.default().props.children.type;
-  const base = auth;
-  const key = () => nodes(CustomerPreparationBoundary()).find(node => node.type === Marker)?.key;
-  const original = key();
-  for (const change of [{ user: { id: 'u-b' } }, { selectedMembership: { ...base.selectedMembership, tenant_id: 'b' } }, { selectedMembership: { ...base.selectedMembership, role: 'employee' } }]) { auth = { ...base, ...change }; assert.notEqual(key(), original); }
-  for (const change of [{ user: null }, { selectedMembership: null }, { selectedMembership: { ...base.selectedMembership, is_active: false } }, { loading: true }, { error: 'session expired' }, { selectedMembership: { ...base.selectedMembership, role: 'platform_admin' } }]) { auth = { ...base, ...change }; assert.equal(CustomerPreparationBoundary(), null); }
 });
+
 test('Next page exposes only its default component, never a test-only named boundary', () => {
   const source = readFileSync(new URL('../src/app/clientes/cadastro-inteligente/page.tsx', import.meta.url), 'utf8');
   const ast = ts.createSourceFile('page.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -200,4 +192,13 @@ test('new preparation sources contain no transport, persistence, logging or lega
     const source = readFileSync(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /\bfetch\s*\(|supabase\.|localStorage|sessionStorage|console\.|saveTenantData|dbService|service_role|tenant_data/);
   }
+});
+
+test('notes are optional, text only and bounded to two thousand characters', () => {
+  assert.equal(rules.validCustomerNotes(undefined), true);
+  assert.equal(rules.validCustomerNotes(''), true);
+  assert.equal(rules.validCustomerNotes('x'.repeat(2000)), true);
+  assert.equal(rules.validCustomerNotes('x'.repeat(2001)), false);
+  assert.equal(rules.validCustomerNotes(123), false);
+  assert.ok(rules.validateCustomerDraft({ ...draft, notes: 'x'.repeat(2001) }, today).notes);
 });

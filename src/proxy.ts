@@ -6,6 +6,9 @@ export async function proxy(request: NextRequest) {
   let pathname = request.nextUrl.pathname;
   try { pathname = decodeURIComponent(pathname); } catch { /* Invalid paths cannot enable the feature. */ }
   pathname = pathname.replace(/\/+$/, '');
+  if (pathname === '/api/customers' && process.env.HANDYHUB_CUSTOMER_PERSISTENCE_ENABLED !== 'true') {
+    return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+  }
   if ((pathname === '/meus-agendamentos' || pathname === '/api/agenda/own') &&
       process.env.HANDYHUB_OWN_AGENDA_ENABLED !== 'true') {
     return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });

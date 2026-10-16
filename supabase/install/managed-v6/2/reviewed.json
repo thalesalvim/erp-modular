@@ -1,0 +1,10 @@
+{
+  "release_id": "managed-customer-pilot-v6-2-local",
+  "lineage": "managed-v6-1-revision-2-to-customer-pilot; not v1-v5-C1 installation",
+  "hosted_certified": false,
+  "root_sha256": "0968ea0d188ae411bfec94435b6580bb98898ca6966e61f027404eeecf070bf5",
+  "source_sha256": "00716709c55fc2bba97138578274df228dcf2971de4cdac2e9004556e59a9d0b",
+  "provenance": "Two independently constructed owned PostgreSQL managed-profile fixtures reproduced the same root; extension DDL rolled back before seal insertion. Old release record is preserved.",
+  "personal_data": "Private native columns and tenant RLS/ACLs; no claim of protection against database administrator or readable database backups. Synthetic local pilot only.",
+  "hosted_activation": "Not authorized; no hosted executor. Requires reviewed backup/recovery, provider certification and explicit authorization."
+}

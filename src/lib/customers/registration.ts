@@ -1,9 +1,10 @@
-/** Local preparation only. These checks do not authorize or persist customers. */
+/** Client-side validation only. Authorization and persistence are enforced by the server. */
 export interface CustomerDraft {
   fullName: string;
   cpf: string;
   birthDate: string;
   phone: string;
+  notes?: string;
 }
 export type CustomerField = keyof CustomerDraft;
 export type CustomerErrors = Partial<Record<CustomerField, string>>;
@@ -76,12 +77,18 @@ export function validFullName(value: unknown): boolean {
   return value.trim().split(/\s+/).filter(part => (part.match(/\p{L}/gu) ?? []).length >= 2).length >= 2;
 }
 
+/** Optional free-text notes. Do not use this for audit justifications. */
+export function validCustomerNotes(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.length <= 2000);
+}
+
 export function validateCustomerDraft(draft: CustomerDraft, today: string): CustomerErrors {
   const errors: CustomerErrors = {};
   if (!validFullName(draft.fullName)) errors.fullName = 'Informe nome e sobrenome, sem números, com até 200 caracteres.';
   if (!validCpf(draft.cpf)) errors.cpf = 'Informe um CPF válido com 11 dígitos. Sequências repetidas não são aceitas.';
   if (!validBirthDate(draft.birthDate, today)) errors.birthDate = 'Informe uma data de nascimento existente e não futura.';
   if (!normalizePhone(draft.phone)) errors.phone = 'Informe telefone brasileiro com DDD e 10 ou 11 dígitos.';
+  if (!validCustomerNotes(draft.notes)) errors.notes = 'As observações devem ter até 2.000 caracteres.';
   return errors;
 }
 
@@ -121,7 +128,7 @@ export interface CustomerReview {
 const unavailable = (): CustomerReview => ({ status: 'unavailable', cpfConflict: false, similarName: false, sharedPhone: false });
 
 /** Receives an explicitly scoped snapshot in tests; NO database/cache lookup.
- * Production will require a fresh authorized server projection, never caller claims.
+ * Production requires a fresh authorized server projection, never caller claims.
  * Only booleans are returned; no CPF, name or identifier of another record. */
 export function reviewCustomerDuplicates(draft: CustomerDraft, tenantId: string,
   catalog: { tenantId: string; records: readonly CustomerReviewRecord[] } | null, editingId?: string): CustomerReview {
@@ -131,7 +138,6 @@ export function reviewCustomerDuplicates(draft: CustomerDraft, tenantId: string,
     if (!row || row.tenantId !== tenantId || typeof row.id !== 'string' || !row.id || ids.has(row.id) || typeof row.fullName !== 'string') return unavailable();
     ids.add(row.id);
   }
-  // Unknown update identity must not silently become a creation or exclusion.
   if (editingId !== undefined && !ids.has(editingId)) return unavailable();
   const records = catalog.records.filter(row => row.id !== editingId);
   const incomplete = catalog.records.some(row => !validFullName(row.fullName) || !validCpf(row.cpf) || !normalizePhone(row.phone) || !row.birthDate || !calendarDate(row.birthDate));
